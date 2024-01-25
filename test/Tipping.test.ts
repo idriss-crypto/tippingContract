@@ -59,9 +59,9 @@ const AssetType = {
     let mockPriceOracle: MaticPriceAggregatorV3Mock;
     let mockEAS: MockEAS;
     let tippingContract: Tipping;
-    let dollarInWei: BigInt;
-    let PAYMENT_FEE_PERCENTAGE: BigInt;
-    let PAYMENT_FEE_PERCENTAGE_DENOMINATOR: BigInt;
+    let dollarInWei: bigint;
+    let PAYMENT_FEE_PERCENTAGE: bigint;
+    let PAYMENT_FEE_PERCENTAGE_DENOMINATOR: bigint;
     let tippingInterface: Interface;
 
     const setupToken = async () => {
@@ -152,7 +152,6 @@ const AssetType = {
 
     describe("Contract management", async () => {
         it("properly adds admin", async () => {
-            console.log("contract address", tippingContract.address)
             
             expect(await tippingContract.admins(ownerAddress)).to.be.true;
             expect(await tippingContract.admins(signer1Address)).to.be.false;
@@ -248,5 +247,252 @@ const AssetType = {
                 tippingContract.renounceOwnership()
             ).to.be.revertedWithCustomError(tippingContract, "RenounceOwnershipNotAllowed");
         });
+    });
+
+    describe("Send native currency", () => {
+        it("correctly calculates percentage fee", async () => {
+            // Fee is on top in the new design:
+            // protocol forwards x. Here x+1% = weiToSend
+            const weiToSend = BigInt("1000000");
+            const expectedProtocolFee = weiToSend * PAYMENT_FEE_PERCENTAGE / PAYMENT_FEE_PERCENTAGE_DENOMINATOR;
+            const calculatedFee = await tippingContract.getPaymentFee(
+                weiToSend,
+                AssetType.Native,
+                signer1Address
+            );
+            expect(calculatedFee).to.equal(expectedProtocolFee);
+
+            await tippingContract.addPublicGood(signer2Address);
+            const calculatedFeePG = await tippingContract.getPaymentFee(
+                weiToSend,
+                AssetType.Native,
+                signer2Address
+            );
+            expect(calculatedFeePG.toString()).to.equal("0");
+            await tippingContract.deletePublicGood(signer2Address);
+        });
+        it("allows for sending native currency", async () => {
+            const weiToReceive = BigInt("1000000");
+            const calculatedFee = await tippingContract.getPaymentFee(
+                weiToReceive,
+                AssetType.Native,
+                signer1Address
+            );
+            const weiToSend = weiToReceive + calculatedFee;
+
+            const tippingContractBalanceBefore = await provider.getBalance(
+                tippingContract.address
+            );
+            const signer1BalanceBefore = await provider.getBalance(
+                signer1Address
+            );
+
+            await tippingContract.sendNativeTo(signer1Address, "", {
+                value: weiToSend,
+            });
+            const tippingContractBalanceAfter = await provider.getBalance(
+                tippingContract.address
+            );
+            const signer1BalanceAfter = await provider.getBalance(
+                signer1Address
+            );
+            expect(tippingContractBalanceAfter).to.equal(tippingContractBalanceBefore + calculatedFee);
+            expect(signer1BalanceAfter).to.equal(signer1BalanceBefore + weiToReceive);
+
+            // Do not take a fee if the recipient is a public good, and add attestation
+            await tippingContract.addPublicGood(signer2Address);
+            const signer2BalanceBefore = await provider.getBalance(
+                signer2Address
+            );
+            await tippingContract.sendNativeTo(signer2Address, "", {
+                value: weiToReceive,
+            });
+            const tippingContractBalanceAfter2 = await provider.getBalance(
+                tippingContract.address
+            );
+            const signer2BalanceAfter = await provider.getBalance(
+                signer2Address
+            );
+            expect(tippingContractBalanceAfter2).to.equal(
+                tippingContractBalanceAfter
+            );
+            expect(signer2BalanceAfter).to.equal(
+                signer2BalanceBefore + weiToReceive
+            );
+            await tippingContract.deletePublicGood(signer2Address);
+        });
+
+        it("allows sending asset to other (non-publicGood) address as batch", async () => {
+            const weiToReceive1 = BigInt("1000000");
+            const weiToReceive2 = BigInt("2500000");
+            const tippingContractBalanceBefore = await provider.getBalance(
+                tippingContract.address
+            );
+            const sig1BalanceBefore = await provider.getBalance(signer1Address);
+            const sig2BalanceBefore = await provider.getBalance(signer2Address);
+
+            const batchObject1 = {
+                assetType: AssetType.Native,
+                recipient: signer1Address,
+                amount: weiToReceive1,
+                tokenId: 0,
+                tokenAddress: ZERO_ADDRESS,
+                message: "",
+            };
+            const batchObject2 = {
+                assetType: AssetType.Native,
+                recipient: signer2Address,
+                amount: weiToReceive2,
+                tokenId: 0,
+                tokenAddress: ZERO_ADDRESS,
+                message: "",
+            };
+
+            const batchSendObject = await tippingContract.calculateBatchFee([
+                batchObject1,
+                batchObject2,
+            ]);
+            let nativeAmountToSend = BigInt(0);
+            let adjustedBatchSendObject = batchSendObject.map(call => {
+                nativeAmountToSend += BigInt(call.nativeAmount);
+                return {
+                    assetType: call.assetType,
+                    recipient: call.recipient,
+                    amount: call.amount,
+                    tokenId: call.tokenId,
+                    tokenAddress: call.tokenAddress,
+                    message: call.message,
+                };
+            });
+
+            await tippingContract.batchSendTo(adjustedBatchSendObject, {
+                value: nativeAmountToSend,
+            });
+
+            const tippingContractBalanceAfter = await provider.getBalance(
+                tippingContract.address
+            );
+            const sig1BalanceAfter = await provider.getBalance(signer1Address);
+            const sig2BalanceAfter = await provider.getBalance(signer2Address);
+
+            expect(tippingContractBalanceAfter).to.equal(
+                tippingContractBalanceBefore + nativeAmountToSend - weiToReceive1 - weiToReceive2
+            );
+            expect(sig1BalanceAfter).to.equal(
+                sig1BalanceBefore + weiToReceive1
+            );
+            expect(sig2BalanceAfter).to.equal(
+                sig2BalanceBefore + weiToReceive2
+            );
+        });
+
+        it("allows sending asset to other (non-publicGood and publicGoods) address as batch", async () => {
+            const weiToReceive1 = BigInt("1000000");
+            const weiToReceive2 = BigInt("2500000");
+            const tippingContractBalanceBefore = await provider.getBalance(
+                tippingContract.address
+            );
+            const sig1BalanceBefore = await provider.getBalance(signer1Address);
+            const sig2BalanceBefore = await provider.getBalance(signer2Address);
+            await tippingContract.addPublicGood(signer2Address);
+
+            const batchObject1 = {
+                assetType: AssetType.Native,
+                recipient: signer1Address,
+                amount: weiToReceive1,
+                tokenId: 0,
+                tokenAddress: ZERO_ADDRESS,
+                message: "",
+            };
+            const batchObject2 = {
+                assetType: AssetType.Native,
+                recipient: signer2Address,
+                amount: weiToReceive2,
+                tokenId: 0,
+                tokenAddress: ZERO_ADDRESS,
+                message: "",
+            };
+
+            const batchSendObject = await tippingContract.calculateBatchFee([
+                batchObject1,
+                batchObject2,
+            ]);
+            let nativeAmountToSend = BigInt(0);
+            let adjustedBatchSendObject = batchSendObject.map(call => {
+                nativeAmountToSend += BigInt(call.nativeAmount);
+                return {
+                    assetType: call.assetType,
+                    recipient: call.recipient,
+                    amount: call.amount,
+                    tokenId: call.tokenId,
+                    tokenAddress: call.tokenAddress,
+                    message: call.message,
+                };
+            });
+
+            await tippingContract.batchSendTo(adjustedBatchSendObject, {
+                value: nativeAmountToSend,
+            });
+
+            const tippingContractBalanceAfter = await provider.getBalance(
+                tippingContract.address
+            );
+            const sig1BalanceAfter = await provider.getBalance(signer1Address);
+            const sig2BalanceAfter = await provider.getBalance(signer2Address);
+
+            expect(batchSendObject[1].amount).to.equal(weiToReceive2);
+            expect(tippingContractBalanceAfter).to.equal(
+                tippingContractBalanceBefore + nativeAmountToSend - weiToReceive1 - weiToReceive2
+            );
+            expect(sig1BalanceAfter).to.equal(
+                sig1BalanceBefore + weiToReceive1
+            );
+            expect(sig2BalanceAfter).to.equal(
+                sig2BalanceBefore + weiToReceive2
+            );
+
+            await tippingContract.deletePublicGood(signer2Address);
+        });
+
+        it("emits a TipMessage event", async () => {
+            const weiToReceive = BigInt("1000000");
+            const calculatedFee = await tippingContract.getPaymentFee(
+                weiToReceive,
+                AssetType.Native,
+                signer1Address
+            );
+            const weiToSend = weiToReceive + calculatedFee;
+            await expect(
+                tippingContract.sendNativeTo(signer1Address, "xyz", {
+                    value: weiToSend,
+                })
+            )
+                .to.emit(tippingContract, "TipMessage")
+                .withArgs(
+                    signer1Address,
+                    "xyz",
+                    ownerAddress,
+                    AssetType.Native,
+                    ZERO_ADDRESS,
+                    0,
+                    weiToReceive,
+                    calculatedFee
+                );
+        });
+        // it("emits an Attested event", async () => {
+        //     await tippingContract.addPublicGood(signer1Address);
+
+        //     const weiToSend = BigNumber.from("1000000");
+        //     await expect(
+        //         tippingContract.sendNativeTo(signer1Address, "", {
+        //             value: weiToSend,
+        //         })
+        //     )
+        //         .to.emit(tippingContract, "Attested")
+        //         .withArgs(
+        //             ownerAddress
+        //         );
+        //     await tippingContract.deletePublicGood(signer1Address);
+        // });
     });
 });
