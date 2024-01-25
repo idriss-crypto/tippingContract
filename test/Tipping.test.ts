@@ -62,6 +62,7 @@ const AssetType = {
     let dollarInWei: bigint;
     let PAYMENT_FEE_PERCENTAGE: bigint;
     let PAYMENT_FEE_PERCENTAGE_DENOMINATOR: bigint;
+    let schema: String;
     let tippingInterface: Interface;
 
     const setupToken = async () => {
@@ -107,6 +108,7 @@ const AssetType = {
         ownerAddress = await owner.getAddress();
         signer1Address = await signer1.getAddress();
         signer2Address = await signer2.getAddress();
+        schema = "0x28b73429cc730191053ba7fe21e17253be25dbab480f0c3a369de5217657d925";
 
         const MaticPriceAggregatorV3MockFactory = await ethers.getContractFactory("MaticPriceAggregatorV3Mock");
         mockPriceOracle = (await MaticPriceAggregatorV3MockFactory.deploy()) as MaticPriceAggregatorV3Mock;
@@ -130,7 +132,7 @@ const AssetType = {
             2300,
             18,
             mockEAS.address,
-            "0x28b73429cc730191053ba7fe21e17253be25dbab480f0c3a369de5217657d925"
+            schema
         )) as Tipping;
         await tippingContract.waitForDeployment();
 
@@ -479,20 +481,24 @@ const AssetType = {
                     calculatedFee
                 );
         });
-        // it("emits an Attested event", async () => {
-        //     await tippingContract.addPublicGood(signer1Address);
+        it.only("emits an Attested event", async () => {
+            await tippingContract.addPublicGood(signer1Address);
 
-        //     const weiToSend = BigNumber.from("1000000");
-        //     await expect(
-        //         tippingContract.sendNativeTo(signer1Address, "", {
-        //             value: weiToSend,
-        //         })
-        //     )
-        //         .to.emit(tippingContract, "Attested")
-        //         .withArgs(
-        //             ownerAddress
-        //         );
-        //     await tippingContract.deletePublicGood(signer1Address);
-        // });
+            const weiToSend = BigInt("1000000");
+
+            await expect(
+                tippingContract.sendNativeTo(signer1Address, "", {
+                    value: weiToSend,
+                })
+            )
+                .to.emit(mockEAS, "Attested")
+                .withArgs(
+                    ownerAddress,
+                    tippingContract.address,
+                    schema
+                );
+            
+            await tippingContract.deletePublicGood(signer1Address);
+        });
     });
 });
