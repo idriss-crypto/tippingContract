@@ -246,7 +246,7 @@ const AssetType = {
         it("fails when trying to renounce contract ownership", async () => {
             await expect(
                 tippingContract.renounceOwnership()
-            ).to.be.revertedWith("");
+            ).to.be.revertedWithCustomError(tippingContract, "RenounceOwnershipNotAllowed");
         });
     });
 });
