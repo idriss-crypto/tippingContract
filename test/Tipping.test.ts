@@ -16,8 +16,6 @@ import {
 } from "../src/types";
 import TippingArtifact from "../src/artifacts/src/contracts/Tipping.sol/Tipping.json";
 
-
-
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const NFT_ID_ARRAY = [...Array(10).keys()];
 const ERC1155_ARRAY = [
@@ -1337,7 +1335,10 @@ describe("Tipping Contract", function () {
                     "",
                     {value: dollarInWei / BigInt("2")}
                 )
-            ).to.be.revertedWithCustomError(tippingContract, "ValueSentTooSmall");
+            ).to.be.revertedWithCustomError(
+                tippingContract,
+                "ValueSentTooSmall"
+            );
         });
 
         it("emits a TipMessage event", async () => {
@@ -1634,8 +1635,12 @@ describe("Tipping Contract", function () {
                 erc1155ID
             );
 
-            expect(sig1ERC1155BalanceAfter).to.be.equal(sig1ERC1155BalanceBefore + amount1);
-            expect(sig2ERC1155BalanceAfter).to.be.equal(sig2ERC1155BalanceBefore + amount2);
+            expect(sig1ERC1155BalanceAfter).to.be.equal(
+                sig1ERC1155BalanceBefore + amount1
+            );
+            expect(sig2ERC1155BalanceAfter).to.be.equal(
+                sig2ERC1155BalanceBefore + amount2
+            );
             expect(tippingContractNativeBalanceAfter).to.equal(
                 tippingContractNativeBalanceBefore + dollarInWei
             );
@@ -1655,7 +1660,10 @@ describe("Tipping Contract", function () {
                     "",
                     {value: dollarInWei / BigInt("2")}
                 )
-            ).to.be.revertedWithCustomError(tippingContract, "ValueSentTooSmall");
+            ).to.be.revertedWithCustomError(
+                tippingContract,
+                "ValueSentTooSmall"
+            );
 
             const batchObject1 = {
                 assetType: AssetType.ERC1155,
@@ -1695,8 +1703,10 @@ describe("Tipping Contract", function () {
                 tippingContract.batchSendTo(adjustedBatchSendObject, {
                     value: nativeAmountToSend / BigInt("2"),
                 })
-            ).to.be.revertedWithCustomError(tippingContract, "FeeHigherThanProvidedNativeCurrency");
-
+            ).to.be.revertedWithCustomError(
+                tippingContract,
+                "FeeHigherThanProvidedNativeCurrency"
+            );
         });
 
         it("emits a TipMessage event", async () => {

@@ -87,8 +87,6 @@ contract Tipping is
         uint256 fee
     );
 
-    event BatchFee(string reason, uint256 fee);
-
     modifier onlyAdminCanWithdraw() {
         if (admins[msg.sender] != true) {
             revert OnlyAdminCanWithdraw();
@@ -341,8 +339,6 @@ contract Tipping is
                 if (assetType == AssetType.ERC20) {
                     /** Fee is taken in native currency */
                     msgFeeUsed += fee;
-                    emit BatchFee("erc20_fee", fee);
-                    emit BatchFee("erc20_fee_used", msgFeeUsed);
                 }
                 _sendERC20(
                     paymentValue,
@@ -391,8 +387,6 @@ contract Tipping is
                 fee
             );
         }
-        emit BatchFee("fee_used_total", msgFeeUsed);
-
         if (msg.value < msgValueUsed + msgFeeUsed) {
             revert FeeHigherThanProvidedNativeCurrency( msgValueUsed, msgFeeUsed, msg.value );
         }
