@@ -151,34 +151,6 @@ abstract contract FeeCalculator is Ownable {
         else return minimumPaymentFee;
     }
 
-    /**
-     * @notice Calculates payment fee
-     * @param _value - payment value
-     * @param _assetType - asset type, required as ERC20 & ERC721 only take minimal fee
-     * @return fee - processing fee, few percent of slippage is allowed
-     */
-    function getPaymentFeePost(
-        uint256 _value,
-        AssetType _assetType,
-        address _recipient
-    ) public view returns (uint256) {
-        if (publicGoods[_recipient]) {
-            return 0;
-        }
-        uint256 minimumPaymentFee = _getMinimumFee();
-        uint256 percentageFee = _getPercentageFeePost(_value);
-        FeeType feeType = FEE_TYPE_MAPPING[_assetType];
-        if (feeType == FeeType.Constant) {
-            return minimumPaymentFee;
-        } else if (feeType == FeeType.Percentage) {
-            return percentageFee;
-        }
-
-        // default case - PercentageOrConstantMaximum
-        if (percentageFee > minimumPaymentFee) return percentageFee;
-        else return minimumPaymentFee;
-    }
-
     function calculateBatchFee(
         BatchCall[] calldata calls
     ) external view returns (AdjustedBatchCall[] memory resultCalls) {
@@ -263,32 +235,26 @@ abstract contract FeeCalculator is Ownable {
         AssetType _assetType,
         address _recipient
     ) internal view returns (uint256 fee, uint256 value) {
+        
         uint256 minimalPaymentFee = _getMinimumFee();
-        uint256 paymentFee = getPaymentFeePost(
-            _valueToSplit,
-            _assetType,
-            _recipient
-        );
+        uint256 paymentFee = _getPercentageFeePost(_valueToSplit);
 
-        // we accept slippage of native coin price if fee type is not percentage - it this case we always get % no matter dollar price
-        if (
-            FEE_TYPE_MAPPING[_assetType] != FeeType.Percentage &&
-            _valueToSplit >=
-            (minimalPaymentFee * (100 - PAYMENT_FEE_SLIPPAGE_PERCENT)) / 100 &&
-            _valueToSplit <= minimalPaymentFee
-        ) {
-            fee = _valueToSplit;
-        } else {
+        if (publicGoods[_recipient]) {
+            fee = 0;
+            value = _valueToSplit;
+        } else if (FEE_TYPE_MAPPING[_assetType] == FeeType.Percentage) {
             fee = paymentFee;
-        }
-
-        if (_valueToSplit < fee) {
-            revert ValueSentTooSmall();
-        }
-
-        if (FEE_TYPE_MAPPING[_assetType] == FeeType.Percentage) {
             value = _valueToSplit - fee;
         } else {
+            // we accept slippage of native coin price if fee type is not percentage - it this case we always get % no matter dollar price
+            if (msg.value < (minimalPaymentFee * (100 - PAYMENT_FEE_SLIPPAGE_PERCENT)) / 100) {
+                revert ValueSentTooSmall();
+            }
+            if (msg.value >= minimalPaymentFee) {
+                fee = minimalPaymentFee;
+            } else {
+                fee = msg.value;
+            }
             value = _valueToSplit;
         }
     }

@@ -21,6 +21,7 @@ import MockNFTArtifact from "../src/artifacts/src/contracts/mocks/AssetMock.sol/
 import MockERC1155Artifact from "../src/artifacts/src/contracts/mocks/AssetMock.sol/MockERC1155.json";
 import MockTokenArtifact from "../src/artifacts/src/contracts/mocks/AssetMock.sol/MockToken.json";
 import {HardhatEthersHelpers} from "hardhat/types";
+import { FeeCalculator } from "../src/types/FeeCalculator";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const NFT_ID_ARRAY = [...Array(10).keys()];
@@ -67,7 +68,7 @@ describe("Tipping Contract", function () {
         const MockToken = await ethers.getContractFactory("MockToken");
         mockToken = await MockToken.deploy();
         const MockToken2 = await ethers.getContractFactory("MockToken");
-        mockToken2 = await MockToken.deploy();
+        mockToken2 = await MockToken2.deploy();
         await mockToken.waitForDeployment();
         await mockToken2.waitForDeployment();
     };
@@ -521,6 +522,1237 @@ describe("Tipping Contract", function () {
                 .to.emit(mockEAS, "Attested")
                 .withArgs(ownerAddress, tippingContract.address, schema);
 
+            await tippingContract.deletePublicGood(signer1Address);
+        });
+    });
+
+    describe("Send ERC20", () => {
+        // beforeEach(async () => {
+        //     await setupToken();
+        // });
+        it("properly calculates fee when sending asset", async () => {
+            await tippingContract.addSupportedERC20(mockToken2.address);
+            await tippingContract.addPublicGood(signer2Address);
+
+            const tokenToSend = BigInt("1000000");
+            // Fee in token balance
+            const expectedProtocolFeeNonPGSupported =
+                (tokenToSend * PAYMENT_FEE_PERCENTAGE) /
+                PAYMENT_FEE_PERCENTAGE_DENOMINATOR;
+            const calculatedFeeNonPGSupported =
+                await tippingContract.getPaymentFee(
+                    tokenToSend,
+                    AssetType.SUPPORTED_ERC20,
+                    signer1Address
+                );
+            expect(calculatedFeeNonPGSupported).to.equal(
+                expectedProtocolFeeNonPGSupported
+            );
+
+            // Fee in native
+            const expectedProtocolFeeNonPGNonSupported = dollarInWei;
+            const calculatedFeeNonPGNonSupported =
+                await tippingContract.getPaymentFee(
+                    tokenToSend,
+                    AssetType.ERC20,
+                    signer1Address
+                );
+            expect(calculatedFeeNonPGNonSupported).to.equal(
+                expectedProtocolFeeNonPGNonSupported
+            );
+
+            const expectedProtocolFeePG = 0;
+            const calculatedFeePGSupported =
+                await tippingContract.getPaymentFee(
+                    tokenToSend,
+                    AssetType.SUPPORTED_ERC20,
+                    signer2Address
+                );
+            const calculatedFeePGNonSupported =
+                await tippingContract.getPaymentFee(
+                    tokenToSend,
+                    AssetType.ERC20,
+                    signer2Address
+                );
+            expect(calculatedFeePGSupported).to.equal(expectedProtocolFeePG);
+            expect(calculatedFeePGNonSupported).to.equal(expectedProtocolFeePG);
+
+            await tippingContract.deleteSupportedERC20(mockToken2.address);
+            await tippingContract.deletePublicGood(signer2Address);
+        });
+
+        it("allows for sending unsupported ERC20 asset to other address", async () => {
+            await tippingContract.addPublicGood(signer2Address);
+            const tokensToSend = BigInt("1000000");
+            const calculatedFeeNPG = await tippingContract.getPaymentFee(
+                tokensToSend,
+                AssetType.ERC20,
+                signer1Address
+            );
+            // Confirmed to equal 0
+            const calculatedFeePG = await tippingContract.getPaymentFee(
+                tokensToSend,
+                AssetType.ERC20,
+                signer2Address
+            );
+
+            const sig1BalanceBefore = await mockToken.balanceOf(signer1Address);
+            const sig2BalanceBefore = await mockToken.balanceOf(signer2Address);
+            const tippingContractTokenBalanceBefore = await mockToken.balanceOf(
+                tippingContract.address
+            );
+            const tippingContractNativeBalanceBefore =
+                await provider.getBalance(tippingContract.address);
+
+            await mockToken.increaseAllowance(
+                tippingContract.address,
+                tokensToSend
+            );
+            await tippingContract.sendERC20To(
+                signer1Address,
+                tokensToSend,
+                mockToken.address,
+                "",
+                {value: calculatedFeeNPG}
+            );
+            const sig1BalanceAfter = await mockToken.balanceOf(signer1Address);
+            const tippingContractTokenBalanceAfter = await mockToken.balanceOf(
+                tippingContract.address
+            );
+            const tippingContractNativeBalanceAfter = await provider.getBalance(
+                tippingContract.address
+            );
+            expect(sig1BalanceAfter).to.equal(sig1BalanceBefore + tokensToSend);
+            expect(tippingContractTokenBalanceBefore).to.equal(
+                tippingContractTokenBalanceAfter
+            );
+            expect(tippingContractNativeBalanceAfter).to.equal(
+                tippingContractNativeBalanceBefore + calculatedFeeNPG
+            );
+
+            await mockToken.increaseAllowance(
+                tippingContract.address,
+                tokensToSend
+            );
+            await tippingContract.sendERC20To(
+                signer2Address,
+                tokensToSend,
+                mockToken.address,
+                "",
+                {value: calculatedFeePG}
+            );
+
+            const sig2BalanceAfter = await mockToken.balanceOf(signer2Address);
+            const tippingContractTokenBalanceAfter2 = await mockToken.balanceOf(
+                tippingContract.address
+            );
+            const tippingContractNativeBalanceAfter2 =
+                await provider.getBalance(tippingContract.address);
+
+            expect(sig2BalanceAfter).to.equal(sig2BalanceBefore + tokensToSend);
+            expect(tippingContractTokenBalanceAfter).to.equal(
+                tippingContractTokenBalanceAfter2
+            );
+            expect(tippingContractNativeBalanceAfter2).to.equal(
+                tippingContractNativeBalanceBefore +
+                    calculatedFeeNPG +
+                    calculatedFeePG
+            );
+
+            await tippingContract.deletePublicGood(signer2Address);
+        });
+
+        it("allows for sending supported ERC20 asset to other address", async () => {
+            await tippingContract.addSupportedERC20(mockToken2.address);
+            await tippingContract.addPublicGood(signer2Address);
+
+            const tokensToReceive = BigInt("1000000");
+            const calculatedFeeNPG = await tippingContract.getPaymentFee(
+                tokensToReceive,
+                AssetType.SUPPORTED_ERC20,
+                signer1Address
+            );
+            // Confirmed to be 0
+            const calculatedFeePG = await tippingContract.getPaymentFee(
+                tokensToReceive,
+                AssetType.SUPPORTED_ERC20,
+                signer2Address
+            );
+            const tokensToSendNPG = tokensToReceive + calculatedFeeNPG;
+            const tokensToSendPG = tokensToReceive + calculatedFeePG;
+
+            const sig1TokenBalanceBefore = await mockToken2.balanceOf(
+                signer1Address
+            );
+            const sig2TokenBalanceBefore = await mockToken2.balanceOf(
+                signer2Address
+            );
+            const tippingContractTokenBalanceBefore =
+                await mockToken2.balanceOf(tippingContract.address);
+
+            await mockToken2.increaseAllowance(
+                tippingContract.address,
+                tokensToSendNPG
+            );
+            await tippingContract.sendERC20To(
+                signer1Address,
+                tokensToSendNPG,
+                mockToken2.address,
+                ""
+            );
+
+            const sig1TokenBalanceAfter = await mockToken2.balanceOf(
+                signer1Address
+            );
+            const tippingContractTokenBalanceAfter = await mockToken2.balanceOf(
+                tippingContract.address
+            );
+
+            expect(sig1TokenBalanceAfter).to.equal(
+                sig1TokenBalanceBefore + tokensToReceive
+            );
+            expect(tippingContractTokenBalanceAfter).to.equal(
+                tippingContractTokenBalanceBefore + calculatedFeeNPG
+            );
+
+            await mockToken2.increaseAllowance(
+                tippingContract.address,
+                tokensToSendPG
+            );
+            await tippingContract.sendERC20To(
+                signer2Address,
+                tokensToSendPG,
+                mockToken2.address,
+                ""
+            );
+
+            const sig2TokenBalanceAfter = await mockToken2.balanceOf(
+                signer2Address
+            );
+            const tippingContractTokenBalanceAfter2 =
+                await mockToken2.balanceOf(tippingContract.address);
+
+            expect(sig2TokenBalanceAfter).to.equal(
+                sig2TokenBalanceBefore + tokensToSendPG
+            );
+            expect(tippingContractTokenBalanceAfter).to.equal(
+                tippingContractTokenBalanceAfter2
+            );
+
+            await tippingContract.deleteSupportedERC20(mockToken2.address);
+            await tippingContract.deletePublicGood(signer2Address);
+        });
+
+        it("allows sending supported ERC20 to non-pg addresses as batch", async () => {
+            await tippingContract.addSupportedERC20(mockToken.address);
+
+            const weiToReceive1 = BigInt("1000000");
+            const weiToReceive2 = BigInt("2500000");
+            const tippingContractBalanceBefore = await provider.getBalance(
+                tippingContract.address
+            );
+            const tippingContractTokenBalanceBefore = await mockToken.balanceOf(
+                tippingContract.address
+            );
+            const sig1BalanceBefore = await mockToken.balanceOf(signer1Address);
+            const sig2BalanceBefore = await mockToken.balanceOf(signer2Address);
+
+            const batchObject1 = {
+                assetType: AssetType.SUPPORTED_ERC20,
+                recipient: signer1Address,
+                amount: weiToReceive1,
+                tokenId: 0,
+                tokenAddress: mockToken.address,
+                message: "",
+            };
+            const batchObject2 = {
+                assetType: AssetType.SUPPORTED_ERC20,
+                recipient: signer2Address,
+                amount: weiToReceive2,
+                tokenId: 0,
+                tokenAddress: mockToken.address,
+                message: "",
+            };
+
+            const batchSendObject = await tippingContract.calculateBatchFee([
+                batchObject1,
+                batchObject2,
+            ]);
+            let nativeAmountToSend = BigInt(0);
+            let tokenAmountToSend = BigInt(0);
+            let adjustedBatchSendObject = batchSendObject.map((call) => {
+                nativeAmountToSend += BigInt(call.nativeAmount);
+                tokenAmountToSend = tokenAmountToSend + BigInt(call.amount);
+                return {
+                    assetType: call.assetType,
+                    recipient: call.recipient,
+                    amount: call.amount,
+                    tokenId: call.tokenId,
+                    tokenAddress: call.tokenAddress,
+                    message: call.message,
+                };
+            });
+
+            await mockToken.increaseAllowance(
+                tippingContract.address,
+                tokenAmountToSend
+            );
+            await tippingContract.batchSendTo(adjustedBatchSendObject, {
+                value: nativeAmountToSend,
+            });
+
+            const tippingContractBalanceAfter = await provider.getBalance(
+                tippingContract.address
+            );
+            const tippingContractTokenBalanceAfter = await mockToken.balanceOf(
+                tippingContract.address
+            );
+            const sig1BalanceAfter = await mockToken.balanceOf(signer1Address);
+            const sig2BalanceAfter = await mockToken.balanceOf(signer2Address);
+
+            expect(sig1BalanceAfter).to.equal(
+                sig1BalanceBefore + weiToReceive1
+            );
+            expect(sig2BalanceAfter).to.equal(
+                sig2BalanceBefore + weiToReceive2
+            );
+            expect(tippingContractTokenBalanceAfter).to.equal(
+                tippingContractTokenBalanceBefore +
+                    tokenAmountToSend -
+                    weiToReceive1 -
+                    weiToReceive2
+            );
+            expect(tippingContractBalanceAfter).to.equal(
+                tippingContractBalanceBefore
+            );
+
+            await tippingContract.deleteSupportedERC20(mockToken.address);
+        });
+
+        it("allows sending supported ERC20 to non-pg and pg addresses as batch", async () => {
+            await tippingContract.addSupportedERC20(mockToken.address);
+            await tippingContract.addPublicGood(signer2Address);
+
+            const weiToReceive1 = BigInt("1000000");
+            const weiToReceive2 = BigInt("2500000");
+            const tippingContractBalanceBefore = await provider.getBalance(
+                tippingContract.address
+            );
+            const tippingContractTokenBalanceBefore = await mockToken.balanceOf(
+                tippingContract.address
+            );
+            const sig1BalanceBefore = await mockToken.balanceOf(signer1Address);
+            const sig2BalanceBefore = await mockToken.balanceOf(signer2Address);
+
+            const batchObject1 = {
+                assetType: AssetType.SUPPORTED_ERC20,
+                recipient: signer1Address,
+                amount: weiToReceive1,
+                tokenId: 0,
+                tokenAddress: mockToken.address,
+                message: "",
+            };
+            const batchObject2 = {
+                assetType: AssetType.SUPPORTED_ERC20,
+                recipient: signer2Address,
+                amount: weiToReceive2,
+                tokenId: 0,
+                tokenAddress: mockToken.address,
+                message: "",
+            };
+
+            const batchSendObject = await tippingContract.calculateBatchFee([
+                batchObject1,
+                batchObject2,
+            ]);
+            let nativeAmountToSend = BigInt(0);
+            let tokenAmountToSend = BigInt(0);
+            let adjustedBatchSendObject = batchSendObject.map((call) => {
+                nativeAmountToSend += BigInt(call.nativeAmount);
+                tokenAmountToSend = tokenAmountToSend + BigInt(call.amount);
+                return {
+                    assetType: call.assetType,
+                    recipient: call.recipient,
+                    amount: call.amount,
+                    tokenId: call.tokenId,
+                    tokenAddress: call.tokenAddress,
+                    message: call.message,
+                };
+            });
+
+            await mockToken.increaseAllowance(
+                tippingContract.address,
+                tokenAmountToSend
+            );
+            await tippingContract.batchSendTo(adjustedBatchSendObject, {
+                value: nativeAmountToSend,
+            });
+
+            const tippingContractBalanceAfter = await provider.getBalance(
+                tippingContract.address
+            );
+            const tippingContractTokenBalanceAfter = await mockToken.balanceOf(
+                tippingContract.address
+            );
+            const sig1BalanceAfter = await mockToken.balanceOf(signer1Address);
+            const sig2BalanceAfter = await mockToken.balanceOf(signer2Address);
+
+            expect(sig1BalanceAfter).to.equal(
+                sig1BalanceBefore + weiToReceive1
+            );
+            expect(sig2BalanceAfter).to.equal(
+                sig2BalanceBefore + weiToReceive2
+            );
+            expect(tippingContractTokenBalanceAfter).to.equal(
+                tippingContractTokenBalanceBefore +
+                    tokenAmountToSend -
+                    weiToReceive1 -
+                    weiToReceive2
+            );
+            expect(tippingContractBalanceAfter).to.equal(
+                tippingContractBalanceBefore
+            );
+
+            await tippingContract.deleteSupportedERC20(mockToken.address);
+            await tippingContract.deletePublicGood(signer2Address);
+        });
+
+        it("allows sending unsupported ERC20 to non-pg addresses as batch", async () => {
+            const weiToReceive1 = BigInt("1000000");
+            const weiToReceive2 = BigInt("2500000");
+            const tippingContractBalanceBefore = await provider.getBalance(
+                tippingContract.address
+            );
+            const tippingContractTokenBalanceBefore = await mockToken.balanceOf(
+                tippingContract.address
+            );
+            const sig1BalanceBefore = await mockToken.balanceOf(signer1Address);
+            const sig2BalanceBefore = await mockToken.balanceOf(signer2Address);
+
+            const batchObject1 = {
+                assetType: AssetType.ERC20,
+                recipient: signer1Address,
+                amount: weiToReceive1,
+                tokenId: 0,
+                tokenAddress: mockToken.address,
+                message: "",
+            };
+            const batchObject2 = {
+                assetType: AssetType.ERC20,
+                recipient: signer2Address,
+                amount: weiToReceive2,
+                tokenId: 0,
+                tokenAddress: mockToken.address,
+                message: "",
+            };
+
+            const batchSendObject = await tippingContract.calculateBatchFee([
+                batchObject1,
+                batchObject2,
+            ]);
+            let nativeAmountToSend = BigInt(0);
+            let tokenAmountToSend = BigInt(0);
+            let adjustedBatchSendObject = batchSendObject.map((call) => {
+                nativeAmountToSend += BigInt(call.nativeAmount);
+                tokenAmountToSend = tokenAmountToSend + BigInt(call.amount);
+                return {
+                    assetType: call.assetType,
+                    recipient: call.recipient,
+                    amount: call.amount,
+                    tokenId: call.tokenId,
+                    tokenAddress: call.tokenAddress,
+                    message: call.message,
+                };
+            });
+
+            await mockToken.increaseAllowance(
+                tippingContract.address,
+                tokenAmountToSend
+            );
+            await tippingContract.batchSendTo(adjustedBatchSendObject, {
+                value: nativeAmountToSend,
+            });
+
+            const tippingContractBalanceAfter = await provider.getBalance(
+                tippingContract.address
+            );
+            const tippingContractTokenBalanceAfter = await mockToken.balanceOf(
+                tippingContract.address
+            );
+            const sig1BalanceAfter = await mockToken.balanceOf(signer1Address);
+            const sig2BalanceAfter = await mockToken.balanceOf(signer2Address);
+
+            expect(sig1BalanceAfter).to.equal(
+                sig1BalanceBefore + weiToReceive1
+            );
+            expect(sig2BalanceAfter).to.equal(
+                sig2BalanceBefore + weiToReceive2
+            );
+            expect(tippingContractTokenBalanceAfter).to.equal(
+                tippingContractTokenBalanceBefore
+            );
+            expect(tippingContractBalanceAfter).to.equal(
+                tippingContractBalanceBefore + nativeAmountToSend
+            );
+        });
+
+        it("allows sending unsupported ERC20 to non-pg and pg addresses as batch", async () => {
+            await tippingContract.addPublicGood(signer2Address);
+
+            const weiToReceive1 = BigInt("1000000");
+            const weiToReceive2 = BigInt("2500000");
+            const tippingContractBalanceBefore = await provider.getBalance(
+                tippingContract.address
+            );
+            const tippingContractTokenBalanceBefore = await mockToken.balanceOf(
+                tippingContract.address
+            );
+            const sig1BalanceBefore = await mockToken.balanceOf(signer1Address);
+            const sig2BalanceBefore = await mockToken.balanceOf(signer2Address);
+
+            const batchObject1 = {
+                assetType: AssetType.ERC20,
+                recipient: signer1Address,
+                amount: weiToReceive1,
+                tokenId: 0,
+                tokenAddress: mockToken.address,
+                message: "",
+            };
+            const batchObject2 = {
+                assetType: AssetType.ERC20,
+                recipient: signer2Address,
+                amount: weiToReceive2,
+                tokenId: 0,
+                tokenAddress: mockToken.address,
+                message: "",
+            };
+
+            const batchSendObject = await tippingContract.calculateBatchFee([
+                batchObject1,
+                batchObject2,
+            ]);
+            let nativeAmountToSend = BigInt(0);
+            let tokenAmountToSend = BigInt(0);
+            let adjustedBatchSendObject = batchSendObject.map((call) => {
+                nativeAmountToSend += BigInt(call.nativeAmount);
+                tokenAmountToSend = tokenAmountToSend + BigInt(call.amount);
+                return {
+                    assetType: call.assetType,
+                    recipient: call.recipient,
+                    amount: call.amount,
+                    tokenId: call.tokenId,
+                    tokenAddress: call.tokenAddress,
+                    message: call.message,
+                };
+            });
+
+            await mockToken.increaseAllowance(
+                tippingContract.address,
+                tokenAmountToSend
+            );
+
+            await tippingContract.batchSendTo(adjustedBatchSendObject, {
+                value: nativeAmountToSend,
+            });
+
+            const tippingContractBalanceAfter = await provider.getBalance(
+                tippingContract.address
+            );
+            const tippingContractTokenBalanceAfter = await mockToken.balanceOf(
+                tippingContract.address
+            );
+            const sig1BalanceAfter = await mockToken.balanceOf(signer1Address);
+            const sig2BalanceAfter = await mockToken.balanceOf(signer2Address);
+
+            expect(sig1BalanceAfter).to.equal(
+                sig1BalanceBefore + weiToReceive1
+            );
+            expect(sig2BalanceAfter).to.equal(
+                sig2BalanceBefore + weiToReceive2
+            );
+            expect(tippingContractTokenBalanceAfter).to.equal(
+                tippingContractTokenBalanceBefore
+            );
+            expect(tippingContractBalanceAfter).to.equal(
+                tippingContractBalanceBefore + nativeAmountToSend
+            );
+
+            await tippingContract.deletePublicGood(signer2Address);
+        });
+
+        it("emits a TipMessage event", async () => {
+            const tokensToSend = BigInt("1000000");
+            const calculatedFee = await tippingContract.getPaymentFee(
+                tokensToSend,
+                AssetType.ERC20,
+                signer1Address
+            );
+            await mockToken.increaseAllowance(
+                tippingContract.address,
+                tokensToSend
+            );
+
+            await expect(
+                tippingContract.sendERC20To(
+                    signer1Address,
+                    tokensToSend,
+                    mockToken.address,
+                    "xyz",
+                    {value: calculatedFee}
+                )
+            )
+                .to.emit(tippingContract, "TipMessage")
+                .withArgs(
+                    signer1Address,
+                    "xyz",
+                    ownerAddress,
+                    AssetType.ERC20,
+                    mockToken.address,
+                    0,
+                    tokensToSend,
+                    calculatedFee
+                );
+        });
+        it("emits an Attested event", async () => {
+            await tippingContract.addPublicGood(signer1Address);
+
+            const tokensToSend = BigInt("1000000");
+            await mockToken.increaseAllowance(
+                tippingContract.address,
+                tokensToSend
+            );
+            await expect(
+                tippingContract.sendERC20To(
+                    signer1Address,
+                    tokensToSend,
+                    mockToken.address,
+                    "",
+                    {value: 0}
+                )
+            )
+                .to.emit(mockEAS, "Attested")
+                .withArgs(ownerAddress, tippingContract.address, schema);
+            await tippingContract.deletePublicGood(signer1Address);
+        });
+    });
+
+    describe("Send ERC721", () => {
+        // beforeEach(async () => {
+        //     await setupERC721();
+        // });
+        // });
+
+        it("properly calculates fee when sending asset", async () => {
+            await tippingContract.addPublicGood(signer2Address);
+
+            const tokenToSend = 1;
+
+            const calculatedFeeNonPG = await tippingContract.getPaymentFee(
+                tokenToSend,
+                AssetType.ERC721,
+                signer1Address
+            );
+            const calculatedFeePG = await tippingContract.getPaymentFee(
+                tokenToSend,
+                AssetType.ERC721,
+                signer2Address
+            );
+
+            expect(calculatedFeeNonPG).to.equal(dollarInWei);
+            expect(calculatedFeePG).to.equal(0);
+
+            await tippingContract.deletePublicGood(signer2Address);
+        });
+
+        it("allows for sending asset to other address", async () => {
+            await tippingContract.addPublicGood(signer2Address);
+            const tokenToSend = 1;
+            const tokenToSend2 = 2;
+            const calculatedFeeNonPG = await tippingContract.getPaymentFee(
+                tokenToSend,
+                AssetType.ERC721,
+                signer1Address
+            );
+            const calculatedFeePG = await tippingContract.getPaymentFee(
+                tokenToSend2,
+                AssetType.ERC721,
+                signer2Address
+            );
+
+            await mockNFT.approve(tippingContract.address, tokenToSend);
+            await tippingContract.sendERC721To(
+                signer1Address,
+                tokenToSend,
+                mockNFT.address,
+                "",
+                {value: calculatedFeeNonPG}
+            );
+
+            await mockNFT.approve(tippingContract.address, tokenToSend2);
+            await tippingContract.sendERC721To(
+                signer2Address,
+                tokenToSend2,
+                mockNFT.address,
+                "",
+                {value: calculatedFeePG}
+            );
+
+            expect(await mockNFT.ownerOf(tokenToSend)).to.equal(signer1Address);
+            expect(await mockNFT.ownerOf(tokenToSend2)).to.equal(
+                signer2Address
+            );
+
+            await tippingContract.deletePublicGood(signer2Address);
+        });
+
+        it("allows for sending asset to non-pg addresses as batch", async () => {
+            const tokenToSend3 = 3;
+            const tokenToSend4 = 4;
+            const tippingContractBalanceBefore = await provider.getBalance(
+                tippingContract.address
+            );
+
+            const batchObject1 = {
+                assetType: AssetType.ERC721,
+                recipient: signer1Address,
+                amount: 1,
+                tokenId: 3,
+                tokenAddress: mockNFT.address,
+                message: "",
+            };
+            const batchObject2 = {
+                assetType: AssetType.ERC721,
+                recipient: signer2Address,
+                amount: 1,
+                tokenId: 4,
+                tokenAddress: mockNFT.address,
+                message: "",
+            };
+
+            const batchSendObject = await tippingContract.calculateBatchFee([
+                batchObject1,
+                batchObject2,
+            ]);
+            let nativeAmountToSend = BigInt(0);
+            let adjustedBatchSendObject = batchSendObject.map((call) => {
+                nativeAmountToSend += BigInt(call.nativeAmount);
+                return {
+                    assetType: call.assetType,
+                    recipient: call.recipient,
+                    amount: call.amount,
+                    tokenId: call.tokenId,
+                    tokenAddress: call.tokenAddress,
+                    message: call.message,
+                };
+            });
+
+            await mockNFT.approve(tippingContract.address, tokenToSend3);
+            await mockNFT.approve(tippingContract.address, tokenToSend4);
+
+            await tippingContract.batchSendTo(adjustedBatchSendObject, {
+                value: nativeAmountToSend,
+            });
+            const tippingContractBalanceAfter = await provider.getBalance(
+                tippingContract.address
+            );
+
+            expect(await mockNFT.ownerOf(tokenToSend3)).to.equal(
+                signer1Address
+            );
+            expect(await mockNFT.ownerOf(tokenToSend4)).to.equal(
+                signer2Address
+            );
+            expect(tippingContractBalanceAfter).to.equal(
+                tippingContractBalanceBefore + dollarInWei + dollarInWei
+            );
+        });
+
+        it("allows for sending asset to other address (PG and Non-PG) as batch", async () => {
+            await tippingContract.addPublicGood(signer2Address);
+
+            const tokenToSend5 = 5;
+            const tokenToSend6 = 6;
+            const tippingContractBalanceBefore = await provider.getBalance(
+                tippingContract.address
+            );
+
+            const batchObject1 = {
+                assetType: AssetType.ERC721,
+                recipient: signer1Address,
+                amount: 1,
+                tokenId: 5,
+                tokenAddress: mockNFT.address,
+                message: "",
+            };
+            const batchObject2 = {
+                assetType: AssetType.ERC721,
+                recipient: signer2Address,
+                amount: 1,
+                tokenId: 6,
+                tokenAddress: mockNFT.address,
+                message: "",
+            };
+
+            const batchSendObject = await tippingContract.calculateBatchFee([
+                batchObject1,
+                batchObject2,
+            ]);
+            let nativeAmountToSend = BigInt(0);
+            let adjustedBatchSendObject = batchSendObject.map((call) => {
+                nativeAmountToSend += BigInt(call.nativeAmount);
+                return {
+                    assetType: call.assetType,
+                    recipient: call.recipient,
+                    amount: call.amount,
+                    tokenId: call.tokenId,
+                    tokenAddress: call.tokenAddress,
+                    message: call.message,
+                };
+            });
+
+            await mockNFT.approve(tippingContract.address, tokenToSend5);
+            await mockNFT.approve(tippingContract.address, tokenToSend6);
+
+            await tippingContract.batchSendTo(adjustedBatchSendObject, {
+                value: nativeAmountToSend,
+            });
+            const tippingContractBalanceAfter = await provider.getBalance(
+                tippingContract.address
+            );
+
+            expect(await mockNFT.ownerOf(tokenToSend5)).to.equal(
+                signer1Address
+            );
+            expect(await mockNFT.ownerOf(tokenToSend6)).to.equal(
+                signer2Address
+            );
+            expect(tippingContractBalanceAfter).to.equal(
+                tippingContractBalanceBefore + dollarInWei
+            );
+
+            await tippingContract.deletePublicGood(signer2Address);
+        });
+
+        it("reverts when fee is too small", async () => {
+            const assetIdToSend = 7;
+            await mockNFT.approve(tippingContract.address, assetIdToSend);
+
+            await expect(
+                tippingContract.sendERC721To(
+                    signer1Address,
+                    assetIdToSend,
+                    mockNFT.address,
+                    "",
+                    {value: dollarInWei / BigInt("2")}
+                )
+            ).to.be.revertedWithCustomError(tippingContract, "ValueSentTooSmall");
+        });
+
+        it("emits a TipMessage event", async () => {
+            await mockNFT.approve(tippingContract.address, 7);
+            await expect(
+                tippingContract.sendERC721To(
+                    signer1Address,
+                    7,
+                    mockNFT.address,
+                    "xyz",
+                    {value: dollarInWei}
+                )
+            )
+                .to.emit(tippingContract, "TipMessage")
+                .withArgs(
+                    signer1Address,
+                    "xyz",
+                    ownerAddress,
+                    AssetType.ERC721,
+                    mockNFT.address,
+                    7,
+                    1,
+                    dollarInWei
+                );
+        });
+        it("emits an Attested event", async () => {
+            const assetIdToSend = 8;
+            await tippingContract.addPublicGood(signer1Address);
+
+            await mockNFT.approve(tippingContract.address, assetIdToSend);
+            await expect(
+                tippingContract.sendERC721To(
+                    signer1Address,
+                    assetIdToSend,
+                    mockNFT.address,
+                    "",
+                    {value: dollarInWei}
+                )
+            )
+                .to.emit(mockEAS, "Attested")
+                .withArgs(ownerAddress, tippingContract.address, schema);
+            await tippingContract.deletePublicGood(signer1Address);
+        });
+    });
+
+    describe("Send ERC1155", () => {
+        // beforeEach(async () => {
+        //     await setupERC1155();
+        // });
+
+        it("properly calculates fee when sending asset", async () => {
+            await tippingContract.addPublicGood(signer2Address);
+
+            const tokenToSend = 1;
+
+            const calculatedFeeNonPG = await tippingContract.getPaymentFee(
+                tokenToSend,
+                AssetType.ERC1155,
+                signer1Address
+            );
+            const calculatedFeePG = await tippingContract.getPaymentFee(
+                tokenToSend,
+                AssetType.ERC1155,
+                signer2Address
+            );
+
+            expect(calculatedFeeNonPG).to.equal(dollarInWei);
+            expect(calculatedFeePG).to.equal(0);
+
+            await tippingContract.deletePublicGood(signer2Address);
+        });
+
+        it("allows for sending asset to other address", async () => {
+            await tippingContract.addPublicGood(signer2Address);
+            const tokenToSend = 1;
+            const tokenToSend2 = 2;
+            const calculatedFeeNonPG = await tippingContract.getPaymentFee(
+                tokenToSend,
+                AssetType.ERC721,
+                signer1Address
+            );
+            const calculatedFeePG = await tippingContract.getPaymentFee(
+                tokenToSend2,
+                AssetType.ERC721,
+                signer2Address
+            );
+
+            const tippingContractBalanceBefore = await provider.getBalance(
+                tippingContract.address
+            );
+
+            const sig1BalanceBefore = await mockERC1155.balanceOf(
+                signer1Address,
+                tokenToSend
+            );
+            const sig2BalanceBefore = await mockERC1155.balanceOf(
+                signer2Address,
+                tokenToSend2
+            );
+
+            await mockERC1155.setApprovalForAll(tippingContract.address, true);
+            await tippingContract.sendERC1155To(
+                signer1Address,
+                tokenToSend,
+                1,
+                mockERC1155.address,
+                "",
+                {value: calculatedFeeNonPG}
+            );
+            await tippingContract.sendERC1155To(
+                signer2Address,
+                tokenToSend2,
+                1,
+                mockERC1155.address,
+                "",
+                {value: calculatedFeePG}
+            );
+
+            const tippingContractBalanceAfter = await provider.getBalance(
+                tippingContract.address
+            );
+            const sig1BalanceAfter = await mockERC1155.balanceOf(
+                signer1Address,
+                tokenToSend
+            );
+            const sig2BalanceAfter = await mockERC1155.balanceOf(
+                signer2Address,
+                tokenToSend2
+            );
+
+            expect(sig1BalanceBefore).to.be.equal(0);
+            expect(sig1BalanceAfter).to.be.equal(1);
+            expect(sig2BalanceBefore).to.be.equal(0);
+            expect(sig2BalanceAfter).to.be.equal(1);
+            expect(tippingContractBalanceAfter).to.equal(
+                tippingContractBalanceBefore +
+                    calculatedFeeNonPG +
+                    calculatedFeePG
+            );
+            expect(tippingContractBalanceAfter).to.equal(
+                tippingContractBalanceBefore + dollarInWei
+            );
+
+            await tippingContract.deletePublicGood(signer2Address);
+        });
+
+        it("allows for sending asset to other non-PG addresses as batch", async () => {
+            const erc1155ID = 3;
+            const amount1 = 2;
+            const amount2 = 3;
+            const tippingContractNativeBalanceBefore =
+                await provider.getBalance(tippingContract.address);
+
+            const sig1ERC1155BalanceBefore = await mockERC1155.balanceOf(
+                signer1Address,
+                erc1155ID
+            );
+            const sig2ERC1155BalanceBefore = await mockERC1155.balanceOf(
+                signer2Address,
+                erc1155ID
+            );
+
+            const batchObject1 = {
+                assetType: AssetType.ERC1155,
+                recipient: signer1Address,
+                amount: amount1,
+                tokenId: erc1155ID,
+                tokenAddress: mockERC1155.address,
+                message: "",
+            };
+            const batchObject2 = {
+                assetType: AssetType.ERC1155,
+                recipient: signer2Address,
+                amount: amount2,
+                tokenId: erc1155ID,
+                tokenAddress: mockERC1155.address,
+                message: "",
+            };
+
+            const batchSendObject = await tippingContract.calculateBatchFee([
+                batchObject1,
+                batchObject2,
+            ]);
+            let nativeAmountToSend = BigInt(0);
+            let adjustedBatchSendObject = batchSendObject.map((call) => {
+                nativeAmountToSend += BigInt(call.nativeAmount);
+                return {
+                    assetType: call.assetType,
+                    recipient: call.recipient,
+                    amount: call.amount,
+                    tokenId: call.tokenId,
+                    tokenAddress: call.tokenAddress,
+                    message: call.message,
+                };
+            });
+
+            await mockERC1155.setApprovalForAll(tippingContract.address, true);
+
+            await tippingContract.batchSendTo(adjustedBatchSendObject, {
+                value: nativeAmountToSend,
+            });
+
+            const tippingContractNativeBalanceAfter = await provider.getBalance(
+                tippingContract.address
+            );
+            const tippingContractERC1155BalanceAfter =
+                await mockERC1155.balanceOf(tippingContract.address, erc1155ID);
+            const sig1ERC1155BalanceAfter = await mockERC1155.balanceOf(
+                signer1Address,
+                erc1155ID
+            );
+            const sig2ERC1155BalanceAfter = await mockERC1155.balanceOf(
+                signer2Address,
+                erc1155ID
+            );
+
+            expect(sig1ERC1155BalanceBefore).to.be.equal(0);
+            expect(sig1ERC1155BalanceAfter).to.be.equal(2);
+            expect(sig2ERC1155BalanceBefore).to.be.equal(0);
+            expect(sig2ERC1155BalanceAfter).to.be.equal(3);
+            expect(tippingContractNativeBalanceAfter).to.equal(
+                tippingContractNativeBalanceBefore + dollarInWei + dollarInWei
+            );
+        });
+
+        it("allows for sending asset to other address (PG and Non-PG) as batch", async () => {
+            await tippingContract.addPublicGood(signer2Address);
+
+            const erc1155ID = 3;
+            const amount1 = BigInt("4");
+            const amount2 = BigInt("1");
+            const tippingContractNativeBalanceBefore =
+                await provider.getBalance(tippingContract.address);
+
+            const sig1ERC1155BalanceBefore = await mockERC1155.balanceOf(
+                signer1Address,
+                erc1155ID
+            );
+            const sig2ERC1155BalanceBefore = await mockERC1155.balanceOf(
+                signer2Address,
+                erc1155ID
+            );
+
+            const batchObject1 = {
+                assetType: AssetType.ERC1155,
+                recipient: signer1Address,
+                amount: amount1,
+                tokenId: erc1155ID,
+                tokenAddress: mockERC1155.address,
+                message: "",
+            };
+            const batchObject2 = {
+                assetType: AssetType.ERC1155,
+                recipient: signer2Address,
+                amount: amount2,
+                tokenId: erc1155ID,
+                tokenAddress: mockERC1155.address,
+                message: "",
+            };
+
+            const batchSendObject = await tippingContract.calculateBatchFee([
+                batchObject1,
+                batchObject2,
+            ]);
+            let nativeAmountToSend = BigInt(0);
+            let adjustedBatchSendObject = batchSendObject.map((call) => {
+                nativeAmountToSend += BigInt(call.nativeAmount);
+                return {
+                    assetType: call.assetType,
+                    recipient: call.recipient,
+                    amount: call.amount,
+                    tokenId: call.tokenId,
+                    tokenAddress: call.tokenAddress,
+                    message: call.message,
+                };
+            });
+
+            await mockERC1155.setApprovalForAll(tippingContract.address, true);
+
+            await tippingContract.batchSendTo(adjustedBatchSendObject, {
+                value: nativeAmountToSend,
+            });
+
+            const tippingContractNativeBalanceAfter = await provider.getBalance(
+                tippingContract.address
+            );
+
+            const sig1ERC1155BalanceAfter = await mockERC1155.balanceOf(
+                signer1Address,
+                erc1155ID
+            );
+            const sig2ERC1155BalanceAfter = await mockERC1155.balanceOf(
+                signer2Address,
+                erc1155ID
+            );
+
+            expect(sig1ERC1155BalanceAfter).to.be.equal(sig1ERC1155BalanceBefore + amount1);
+            expect(sig2ERC1155BalanceAfter).to.be.equal(sig2ERC1155BalanceBefore + amount2);
+            expect(tippingContractNativeBalanceAfter).to.equal(
+                tippingContractNativeBalanceBefore + dollarInWei
+            );
+
+            await tippingContract.deletePublicGood(signer2Address);
+        });
+
+        it("reverts when fee is too small", async () => {
+            await mockERC1155.setApprovalForAll(tippingContract.address, true);
+
+            await expect(
+                tippingContract.sendERC1155To(
+                    signer1Address,
+                    1,
+                    1,
+                    mockERC1155.address,
+                    "",
+                    {value: dollarInWei / BigInt("2")}
+                )
+            ).to.be.revertedWithCustomError(tippingContract, "ValueSentTooSmall");
+
+            const batchObject1 = {
+                assetType: AssetType.ERC1155,
+                recipient: signer1Address,
+                amount: 5,
+                tokenId: 4,
+                tokenAddress: mockERC1155.address,
+                message: "",
+            };
+            const batchObject2 = {
+                assetType: AssetType.ERC1155,
+                recipient: signer2Address,
+                amount: 100,
+                tokenId: 5,
+                tokenAddress: mockERC1155.address,
+                message: "",
+            };
+
+            const batchSendObject = await tippingContract.calculateBatchFee([
+                batchObject1,
+                batchObject2,
+            ]);
+            let nativeAmountToSend = BigInt(0);
+            let adjustedBatchSendObject = batchSendObject.map((call) => {
+                nativeAmountToSend += BigInt(call.nativeAmount);
+                return {
+                    assetType: call.assetType,
+                    recipient: call.recipient,
+                    amount: call.amount,
+                    tokenId: call.tokenId,
+                    tokenAddress: call.tokenAddress,
+                    message: call.message,
+                };
+            });
+
+            await expect(
+                tippingContract.batchSendTo(adjustedBatchSendObject, {
+                    value: nativeAmountToSend / BigInt("2"),
+                })
+            ).to.be.revertedWithCustomError(tippingContract, "FeeHigherThanProvidedNativeCurrency");
+
+        });
+
+        it("emits a TipMessage event", async () => {
+            const amountToSend = 10;
+            const IdToSend = 3;
+            await mockERC1155.setApprovalForAll(tippingContract.address, true);
+
+            await expect(
+                tippingContract.sendERC1155To(
+                    signer1Address,
+                    IdToSend,
+                    amountToSend,
+                    mockERC1155.address,
+                    "xyz",
+                    {value: dollarInWei}
+                )
+            )
+                .to.emit(tippingContract, "TipMessage")
+                .withArgs(
+                    signer1Address,
+                    "xyz",
+                    ownerAddress,
+                    AssetType.ERC1155,
+                    mockERC1155.address,
+                    IdToSend,
+                    amountToSend,
+                    dollarInWei
+                );
+        });
+        it("emits an Attested event", async () => {
+            await tippingContract.addPublicGood(signer1Address);
+
+            const amountToSend = 5;
+            const IdToSend = 4;
+            await mockERC1155.setApprovalForAll(tippingContract.address, true);
+
+            await expect(
+                tippingContract.sendERC1155To(
+                    signer1Address,
+                    IdToSend,
+                    amountToSend,
+                    mockERC1155.address,
+                    "",
+                    {value: dollarInWei}
+                )
+            )
+                .to.emit(mockEAS, "Attested")
+                .withArgs(ownerAddress, tippingContract.address, schema);
             await tippingContract.deletePublicGood(signer1Address);
         });
     });

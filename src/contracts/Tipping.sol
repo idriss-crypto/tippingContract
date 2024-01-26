@@ -21,7 +21,7 @@ error OnlyAdminCanWithdraw();
 error UnknownFunctionSelector();
 error WithdrawFailed();
 error RenounceOwnershipNotAllowed();
-error FeeHigherThanProvidedNativeCurrency();
+error FeeHigherThanProvidedNativeCurrency(uint256 value, uint256 fee, uint256 msg);
 error UnsupportedAssetType();
 error PayingWithNative();
 
@@ -86,6 +86,8 @@ contract Tipping is
         uint256 amount,
         uint256 fee
     );
+
+    event BatchFee(string reason, uint256 fee);
 
     modifier onlyAdminCanWithdraw() {
         if (admins[msg.sender] != true) {
@@ -174,7 +176,6 @@ contract Tipping is
         address _tokenContractAddr,
         string memory _message
     ) external payable override nonReentrant {
-        uint256 amountOut;
         uint256 amountIn = _sendERC20From(
             _amount,
             msg.sender,
@@ -182,14 +183,11 @@ contract Tipping is
             _tokenContractAddr
         );
         /** Case: ERC20, constant fee in native */
-        uint256 amountToCheck = msg.value;
         AssetType assetType = AssetType.ERC20;
-
-        // overwriting fee type for supported erc20s
+        // overwriting fee type for supported ERC20s
         if (supportedERC20[_tokenContractAddr]) {
             /** Case: SUPPORTED_ERC20, % fee of amountIn */
             assetType = AssetType.SUPPORTED_ERC20;
-            amountToCheck = amountIn;
             if (msg.value > 0) revert PayingWithNative();
         }
         /** Case: ERC20: paymentValue calculated as with ERC721, ERC1155 */
@@ -197,18 +195,12 @@ contract Tipping is
         (uint256 fee, uint256 paymentValue) = _beforeTransfer(
             assetType,
             _recipient,
-            amountToCheck,
+            amountIn,
             0,
             _tokenContractAddr
         );
 
-        if (assetType == AssetType.SUPPORTED_ERC20) {
-            amountOut = paymentValue;
-        } else {
-            amountOut = amountIn;
-        }
-
-        _sendERC20(amountOut, _recipient, _tokenContractAddr);
+        _sendERC20(paymentValue, _recipient, _tokenContractAddr);
 
         emit TipMessage(
             _recipient,
@@ -217,7 +209,7 @@ contract Tipping is
             assetType,
             _tokenContractAddr,
             0,
-            amountOut,
+            paymentValue,
             fee
         );
     }
@@ -238,7 +230,7 @@ contract Tipping is
         (uint256 fee, ) = _beforeTransfer(
             AssetType.ERC721,
             _recipient,
-            msg.value,
+            1,
             _tokenId,
             _nftContractAddress
         );
@@ -275,7 +267,7 @@ contract Tipping is
         (uint256 fee, ) = _beforeTransfer(
             AssetType.ERC1155,
             _recipient,
-            msg.value,
+            _amount,
             _tokenId,
             _assetContractAddress
         );
@@ -339,26 +331,18 @@ contract Tipping is
                     address(this),
                     calls[i].tokenAddress
                 );
-                if (assetType == AssetType.ERC20) {
-                    /** ToDo check: Purposefully use msg.value. Here, msg.value can much bigger than overall fee, so the fee calculation should not throw an error. Fee error thrown below. */
-                    (fee, ) = _beforeTransfer(
-                        assetType,
-                        calls[i].recipient,
-                        msg.value,
-                        0,
-                        calls[i].tokenAddress
-                    );
-                    /** forward 100% of incoming token, as fee is taken in native currency */
-                    msgFeeUsed += fee;
-                    paymentValue = amountIn;
-                } else {
-                    (, paymentValue) = _beforeTransfer(
+                (fee, paymentValue) = _beforeTransfer(
                         assetType,
                         calls[i].recipient,
                         amountIn,
                         0,
                         calls[i].tokenAddress
                     );
+                if (assetType == AssetType.ERC20) {
+                    /** Fee is taken in native currency */
+                    msgFeeUsed += fee;
+                    emit BatchFee("erc20_fee", fee);
+                    emit BatchFee("erc20_fee_used", msgFeeUsed);
                 }
                 _sendERC20(
                     paymentValue,
@@ -368,16 +352,15 @@ contract Tipping is
             } else if (
                 assetType == AssetType.ERC721 || assetType == AssetType.ERC1155
             ) {
-                /** ToDo check: Purposefully use msg.value. Here, msg.value can much bigger than overall fee, so the fee calculation should not throw an error. Fee error thrown below. */
-                (fee, ) = _beforeTransfer(
+                /** Here, msg.value can much bigger than overall fee, so the fee calculation should not throw an error. */
+                (fee, paymentValue) = _beforeTransfer(
                     assetType,
                     calls[i].recipient,
-                    msg.value,
+                    calls[i].amount,
                     calls[i].tokenId,
                     calls[i].tokenAddress
                 );
                 if (assetType == AssetType.ERC721) {
-                    paymentValue = 1;
                     _sendERC721(
                         calls[i].tokenId,
                         msg.sender,
@@ -385,7 +368,6 @@ contract Tipping is
                         calls[i].tokenAddress
                     );
                 } else {
-                    paymentValue = calls[i].amount;
                     _sendERC1155(
                         calls[i].tokenId,
                         calls[i].amount,
@@ -409,9 +391,10 @@ contract Tipping is
                 fee
             );
         }
+        emit BatchFee("fee_used_total", msgFeeUsed);
 
-        if (msgValueUsed + msgFeeUsed < msg.value) {
-            revert FeeHigherThanProvidedNativeCurrency();
+        if (msg.value < msgValueUsed + msgFeeUsed) {
+            revert FeeHigherThanProvidedNativeCurrency( msgValueUsed, msgFeeUsed, msg.value );
         }
     }
 
