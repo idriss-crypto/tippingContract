@@ -56,7 +56,6 @@ describe("Tipping Contract", function () {
     let PAYMENT_FEE_PERCENTAGE: bigint;
     let PAYMENT_FEE_PERCENTAGE_DENOMINATOR: bigint;
     let schema: String;
-    let tippingInterface: Interface;
 
     const setupToken = async () => {
         // Get the ContractFactory for your MockToken
@@ -140,8 +139,6 @@ describe("Tipping Contract", function () {
         dollarInWei = await mockPriceOracle.dollarToWei();
         PAYMENT_FEE_PERCENTAGE = BigInt("10");
         PAYMENT_FEE_PERCENTAGE_DENOMINATOR = BigInt("1000");
-
-        tippingInterface = new Interface(TippingArtifact.abi);
 
         // Temporary initialization to run tests
         await Promise.all([setupToken(), setupERC721(), setupERC1155()]);
