@@ -21,7 +21,7 @@ contract MockEAS {
     }
 
     // Mock Attested event
-    event Attested(address indexed recipient);
+    event Attested(address indexed recipient, address indexed attester, bytes32 indexed schema);
 
     constructor() {}
 
@@ -29,7 +29,7 @@ contract MockEAS {
     function attest(
         AttestationRequest calldata request
     ) external payable returns (bytes32) {
-        emit Attested(msg.sender);
+        emit Attested(request.data.recipient, msg.sender, request.schema);
         bytes32 nothing;
         return nothing;
     }
