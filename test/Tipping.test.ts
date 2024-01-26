@@ -1,11 +1,10 @@
 import {
     time,
     loadFixture,
-  } from "@nomicfoundation/hardhat-toolbox/network-helpers";
-import { expect, use} from "chai";
-import {ethers} from 'hardhat';
-import {Signer, Interface} from 'ethers';
-
+} from "@nomicfoundation/hardhat-toolbox/network-helpers";
+import {expect, use} from "chai";
+import {ethers} from "hardhat";
+import {Signer, Interface} from "ethers";
 
 import {
     Tipping,
@@ -21,7 +20,7 @@ import TippingArtifact from "../src/artifacts/src/contracts/Tipping.sol/Tipping.
 import MockNFTArtifact from "../src/artifacts/src/contracts/mocks/AssetMock.sol/MockNFT.json";
 import MockERC1155Artifact from "../src/artifacts/src/contracts/mocks/AssetMock.sol/MockERC1155.json";
 import MockTokenArtifact from "../src/artifacts/src/contracts/mocks/AssetMock.sol/MockToken.json";
-import { HardhatEthersHelpers } from "hardhat/types";
+import {HardhatEthersHelpers} from "hardhat/types";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const NFT_ID_ARRAY = [...Array(10).keys()];
@@ -42,10 +41,8 @@ const AssetType = {
     SUPPORTED_ERC20: 4,
 };
 
-
-  describe("Tipping Contract", function () {
-    
-    let provider= ethers.provider;
+describe("Tipping Contract", function () {
+    let provider = ethers.provider;
     let owner: Signer;
     let signer1: Signer;
     let signer2: Signer;
@@ -76,26 +73,29 @@ const AssetType = {
     };
     const setupERC721 = async () => {
         const MockNFT = await ethers.getContractFactory("MockNFT");
-    
+
         mockNFT = await MockNFT.deploy();
         await mockNFT.waitForDeployment();
-    
-    
+
         await Promise.all(
             NFT_ID_ARRAY.map(async (val) => {
-                return await mockNFT.safeMint(ownerAddress, val).catch(() => {});
+                return await mockNFT
+                    .safeMint(ownerAddress, val)
+                    .catch(() => {});
             })
         );
     };
     const setupERC1155 = async () => {
         const MockERC1155 = await ethers.getContractFactory("MockERC1155");
-    
+
         mockERC1155 = await MockERC1155.deploy();
         await mockERC1155.waitForDeployment();
-    
+
         await Promise.all(
             ERC1155_ARRAY.map(async (val) => {
-                return await mockERC1155.mint(ownerAddress, val[0], val[1]).catch(() => {});
+                return await mockERC1155
+                    .mint(ownerAddress, val[0], val[1])
+                    .catch(() => {});
             })
         );
     };
@@ -108,19 +108,22 @@ const AssetType = {
         ownerAddress = await owner.getAddress();
         signer1Address = await signer1.getAddress();
         signer2Address = await signer2.getAddress();
-        schema = "0x28b73429cc730191053ba7fe21e17253be25dbab480f0c3a369de5217657d925";
+        schema =
+            "0x28b73429cc730191053ba7fe21e17253be25dbab480f0c3a369de5217657d925";
 
-        const MaticPriceAggregatorV3MockFactory = await ethers.getContractFactory("MaticPriceAggregatorV3Mock");
-        mockPriceOracle = (await MaticPriceAggregatorV3MockFactory.deploy()) as MaticPriceAggregatorV3Mock;
+        const MaticPriceAggregatorV3MockFactory =
+            await ethers.getContractFactory("MaticPriceAggregatorV3Mock");
+        mockPriceOracle =
+            (await MaticPriceAggregatorV3MockFactory.deploy()) as MaticPriceAggregatorV3Mock;
         await mockPriceOracle.waitForDeployment();
 
-        mockPriceOracle.address = await mockPriceOracle.getAddress()
+        mockPriceOracle.address = await mockPriceOracle.getAddress();
 
         const MockEASFactory = await ethers.getContractFactory("MockEAS");
         mockEAS = (await MockEASFactory.deploy()) as MockEAS;
         await mockEAS.waitForDeployment();
 
-        mockEAS.address = await mockEAS.getAddress()
+        mockEAS.address = await mockEAS.getAddress();
 
         const TippingFactory = await ethers.getContractFactory("Tipping");
         tippingContract = (await TippingFactory.deploy(
@@ -136,10 +139,10 @@ const AssetType = {
         )) as Tipping;
         await tippingContract.waitForDeployment();
 
-        tippingContract.address = await tippingContract.getAddress()
+        tippingContract.address = await tippingContract.getAddress();
 
         dollarInWei = await mockPriceOracle.dollarToWei();
-        PAYMENT_FEE_PERCENTAGE = BigInt("10")
+        PAYMENT_FEE_PERCENTAGE = BigInt("10");
         PAYMENT_FEE_PERCENTAGE_DENOMINATOR = BigInt("1000");
 
         tippingInterface = new Interface(TippingArtifact.abi);
@@ -154,7 +157,6 @@ const AssetType = {
 
     describe("Contract management", async () => {
         it("properly adds admin", async () => {
-            
             expect(await tippingContract.admins(ownerAddress)).to.be.true;
             expect(await tippingContract.admins(signer1Address)).to.be.false;
             expect(await tippingContract.admins(signer2Address)).to.be.false;
@@ -215,8 +217,18 @@ const AssetType = {
             expect(await tippingContract.admins(ownerAddress)).to.be.true;
             expect(await tippingContract.admins(signer1Address)).to.be.false;
 
-            await expect(tippingContract.connect(signer1).withdraw()).to.be.revertedWithCustomError(tippingContract, "OnlyAdminCanWithdraw");
-            await expect(tippingContract.connect(signer1).withdrawToken(ZERO_ADDRESS)).to.be.revertedWithCustomError(tippingContract, "OnlyAdminCanWithdraw");
+            await expect(
+                tippingContract.connect(signer1).withdraw()
+            ).to.be.revertedWithCustomError(
+                tippingContract,
+                "OnlyAdminCanWithdraw"
+            );
+            await expect(
+                tippingContract.connect(signer1).withdrawToken(ZERO_ADDRESS)
+            ).to.be.revertedWithCustomError(
+                tippingContract,
+                "OnlyAdminCanWithdraw"
+            );
             await expect(tippingContract.withdraw()).to.not.be.rejected;
         });
 
@@ -247,7 +259,10 @@ const AssetType = {
         it("fails when trying to renounce contract ownership", async () => {
             await expect(
                 tippingContract.renounceOwnership()
-            ).to.be.revertedWithCustomError(tippingContract, "RenounceOwnershipNotAllowed");
+            ).to.be.revertedWithCustomError(
+                tippingContract,
+                "RenounceOwnershipNotAllowed"
+            );
         });
     });
 
@@ -256,7 +271,9 @@ const AssetType = {
             // Fee is on top in the new design:
             // protocol forwards x. Here x+1% = weiToSend
             const weiToSend = BigInt("1000000");
-            const expectedProtocolFee = weiToSend * PAYMENT_FEE_PERCENTAGE / PAYMENT_FEE_PERCENTAGE_DENOMINATOR;
+            const expectedProtocolFee =
+                (weiToSend * PAYMENT_FEE_PERCENTAGE) /
+                PAYMENT_FEE_PERCENTAGE_DENOMINATOR;
             const calculatedFee = await tippingContract.getPaymentFee(
                 weiToSend,
                 AssetType.Native,
@@ -298,8 +315,12 @@ const AssetType = {
             const signer1BalanceAfter = await provider.getBalance(
                 signer1Address
             );
-            expect(tippingContractBalanceAfter).to.equal(tippingContractBalanceBefore + calculatedFee);
-            expect(signer1BalanceAfter).to.equal(signer1BalanceBefore + weiToReceive);
+            expect(tippingContractBalanceAfter).to.equal(
+                tippingContractBalanceBefore + calculatedFee
+            );
+            expect(signer1BalanceAfter).to.equal(
+                signer1BalanceBefore + weiToReceive
+            );
 
             // Do not take a fee if the recipient is a public good, and add attestation
             await tippingContract.addPublicGood(signer2Address);
@@ -355,7 +376,7 @@ const AssetType = {
                 batchObject2,
             ]);
             let nativeAmountToSend = BigInt(0);
-            let adjustedBatchSendObject = batchSendObject.map(call => {
+            let adjustedBatchSendObject = batchSendObject.map((call) => {
                 nativeAmountToSend += BigInt(call.nativeAmount);
                 return {
                     assetType: call.assetType,
@@ -378,7 +399,10 @@ const AssetType = {
             const sig2BalanceAfter = await provider.getBalance(signer2Address);
 
             expect(tippingContractBalanceAfter).to.equal(
-                tippingContractBalanceBefore + nativeAmountToSend - weiToReceive1 - weiToReceive2
+                tippingContractBalanceBefore +
+                    nativeAmountToSend -
+                    weiToReceive1 -
+                    weiToReceive2
             );
             expect(sig1BalanceAfter).to.equal(
                 sig1BalanceBefore + weiToReceive1
@@ -420,7 +444,7 @@ const AssetType = {
                 batchObject2,
             ]);
             let nativeAmountToSend = BigInt(0);
-            let adjustedBatchSendObject = batchSendObject.map(call => {
+            let adjustedBatchSendObject = batchSendObject.map((call) => {
                 nativeAmountToSend += BigInt(call.nativeAmount);
                 return {
                     assetType: call.assetType,
@@ -444,7 +468,10 @@ const AssetType = {
 
             expect(batchSendObject[1].amount).to.equal(weiToReceive2);
             expect(tippingContractBalanceAfter).to.equal(
-                tippingContractBalanceBefore + nativeAmountToSend - weiToReceive1 - weiToReceive2
+                tippingContractBalanceBefore +
+                    nativeAmountToSend -
+                    weiToReceive1 -
+                    weiToReceive2
             );
             expect(sig1BalanceAfter).to.equal(
                 sig1BalanceBefore + weiToReceive1
@@ -481,7 +508,7 @@ const AssetType = {
                     calculatedFee
                 );
         });
-        it.only("emits an Attested event", async () => {
+        it("emits an Attested event", async () => {
             await tippingContract.addPublicGood(signer1Address);
 
             const weiToSend = BigInt("1000000");
@@ -492,12 +519,8 @@ const AssetType = {
                 })
             )
                 .to.emit(mockEAS, "Attested")
-                .withArgs(
-                    ownerAddress,
-                    tippingContract.address,
-                    schema
-                );
-            
+                .withArgs(ownerAddress, tippingContract.address, schema);
+
             await tippingContract.deletePublicGood(signer1Address);
         });
     });
