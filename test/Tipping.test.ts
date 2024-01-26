@@ -14,14 +14,9 @@ import {
     MockEAS,
     MockERC1155,
 } from "../src/types";
-import MaticPriceAggregatorV3MockArtifact from "../src/artifacts/src/contracts/mocks/MaticPriceAggregatorV3Mock.sol/MaticPriceAggregatorV3Mock.json";
-import MockEASArtifact from "../src/artifacts/src/contracts/mocks/MockEAS.sol/MockEAS.json";
 import TippingArtifact from "../src/artifacts/src/contracts/Tipping.sol/Tipping.json";
-import MockNFTArtifact from "../src/artifacts/src/contracts/mocks/AssetMock.sol/MockNFT.json";
-import MockERC1155Artifact from "../src/artifacts/src/contracts/mocks/AssetMock.sol/MockERC1155.json";
-import MockTokenArtifact from "../src/artifacts/src/contracts/mocks/AssetMock.sol/MockToken.json";
-import {HardhatEthersHelpers} from "hardhat/types";
-import { FeeCalculator } from "../src/types/FeeCalculator";
+
+
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const NFT_ID_ARRAY = [...Array(10).keys()];
