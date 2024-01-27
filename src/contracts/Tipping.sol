@@ -17,8 +17,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
-error OnlyAdminCanWithdraw();
-error UnknownFunctionSelector();
+error OnlyAdminMethod();
 error WithdrawFailed();
 error RenounceOwnershipNotAllowed();
 error FeeHigherThanProvidedNativeCurrency(
@@ -43,8 +42,8 @@ contract Tipping is
     MultiAssetSender,
     FeeCalculator
 {
-    bool immutable SUPPORTS_CHAINLINK;
-    bool immutable SUPPORTS_EAS;
+    bool public SUPPORTS_CHAINLINK;
+    bool public SUPPORTS_EAS;
     mapping(address => bool) public admins;
 
     using SafeERC20 for IERC20;
@@ -91,9 +90,9 @@ contract Tipping is
         uint256 fee
     );
 
-    modifier onlyAdminCanWithdraw() {
+    modifier onlyAdmin() {
         if (admins[msg.sender] != true) {
-            revert OnlyAdminCanWithdraw();
+            revert OnlyAdminMethod();
         }
         _;
     }
@@ -404,7 +403,7 @@ contract Tipping is
     }
 
     /**
-     * Trusted admin methods
+     * Owner and trusted admin methods
      */
 
     /**
@@ -430,7 +429,7 @@ contract Tipping is
      */
     function addPublicGood(
         address publicGoodAddress
-    ) external onlyOwner nonReentrant {
+    ) external onlyAdmin nonReentrant {
         publicGoods[publicGoodAddress] = true;
     }
 
@@ -439,7 +438,7 @@ contract Tipping is
      */
     function deletePublicGood(
         address publicGoodAddress
-    ) external onlyOwner nonReentrant {
+    ) external onlyAdmin nonReentrant {
         delete publicGoods[publicGoodAddress];
     }
 
@@ -448,7 +447,7 @@ contract Tipping is
      */
     function addSupportedERC20(
         address erc20Address
-    ) external onlyOwner nonReentrant {
+    ) external onlyAdmin nonReentrant {
         supportedERC20[erc20Address] = true;
     }
 
@@ -457,15 +456,34 @@ contract Tipping is
      */
     function deleteSupportedERC20(
         address erc20Address
-    ) external onlyOwner nonReentrant {
+    ) external onlyAdmin nonReentrant {
         delete supportedERC20[erc20Address];
     }
 
     /**
-     * @notice Withdraw native currency transfer fees
+     * @notice Add EAS support
      */
-    function withdraw() external override onlyAdminCanWithdraw nonReentrant {
-        (bool success, ) = msg.sender.call{value: address(this).balance}("");
+    function enableEASSupport(address _eas, bytes32 _easSchema) public onlyAdmin {
+        _initializeEAS(_eas, _easSchema);
+        SUPPORTS_EAS = true;
+    }
+
+    /**
+     * @notice Disable EAS support
+     */
+    function disableEASSupport() public onlyAdmin {
+        SUPPORTS_EAS = false;
+    }
+
+    /**
+     * Free for all withdraw methods
+     */
+
+    /**
+     * @notice Withdraw native currency transfer fees to owner address
+     */
+    function withdraw() external override nonReentrant {
+        (bool success, ) = owner().call{value: address(this).balance}("");
         if (!success) {
             revert WithdrawFailed();
         }
@@ -476,10 +494,10 @@ contract Tipping is
      */
     function withdrawToken(
         address _tokenContract
-    ) external override onlyAdminCanWithdraw nonReentrant {
+    ) external override nonReentrant {
         IERC20 withdrawTC = IERC20(_tokenContract);
         withdrawTC.safeTransfer(
-            msg.sender,
+            owner(),
             withdrawTC.balanceOf(address(this))
         );
     }

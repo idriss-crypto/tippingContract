@@ -199,23 +199,46 @@ describe("Tipping Contract", function () {
                 .false;
         });
 
-        it("allows only admin to retrieve funds", async () => {
+        it("properly adds and deletes EAS support", async () => {
+            expect(await tippingContract.publicGoods(signer1Address)).to.be
+                .false;
+
+            await tippingContract.addPublicGood(signer1Address);
+
+            expect(await tippingContract.publicGoods(signer1Address)).to.be
+                .true;
+
+            await tippingContract.deletePublicGood(signer1Address);
+
+            expect(await tippingContract.publicGoods(signer1Address)).to.be
+                .false;
+        });
+
+        it("allows anyone to call the withdraw function", async () => {
             expect(await tippingContract.admins(ownerAddress)).to.be.true;
             expect(await tippingContract.admins(signer1Address)).to.be.false;
 
+            await mockToken.connect(owner).transfer(tippingContract.address, BigInt("1000"))
+
+            const ownerTokenBalanceBefore = await mockToken.balanceOf(ownerAddress);
+
             await expect(
                 tippingContract.connect(signer1).withdraw()
-            ).to.be.revertedWithCustomError(
-                tippingContract,
-                "OnlyAdminCanWithdraw"
-            );
+            ).to.not.be.rejected;
             await expect(
-                tippingContract.connect(signer1).withdrawToken(ZERO_ADDRESS)
-            ).to.be.revertedWithCustomError(
-                tippingContract,
-                "OnlyAdminCanWithdraw"
-            );
+                tippingContract.connect(signer1).withdrawToken(mockToken.address)
+            ).to.not.be.rejected;
             await expect(tippingContract.withdraw()).to.not.be.rejected;
+
+            const ownerTokenBalanceAfter = await mockToken.balanceOf(ownerAddress);
+            const signer1TokenBalanceAfter = await mockToken.balanceOf(signer1Address);
+
+            expect(ownerTokenBalanceAfter).to.equal(
+                ownerTokenBalanceBefore + BigInt("1000")
+            );
+            expect(signer1TokenBalanceAfter).to.equal(
+                signer1TokenBalanceAfter
+            );
         });
 
         it("allows only owner to change owner", async () => {

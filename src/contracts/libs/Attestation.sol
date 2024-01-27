@@ -12,8 +12,8 @@ contract PublicGoodAttester {
     error InvalidEAS();
 
     // The address of the global EAS contract.
-    IEAS private immutable EAS;
-    bytes32 public immutable EAS_SCHEMA;
+    IEAS private EAS;
+    bytes32 public EAS_SCHEMA;
 
     /**
      * @dev Creates a new ExampleAttester instance.
@@ -21,6 +21,11 @@ contract PublicGoodAttester {
      * @param eas The address of the global EAS contract.
      */
     constructor(address eas, bytes32 easSchema) {
+        EAS = IEAS(eas);
+        EAS_SCHEMA = easSchema;
+    }
+
+    function _initializeEAS(address eas, bytes32 easSchema) internal {
         if (eas == address(0)) {
             revert InvalidEAS();
         }
