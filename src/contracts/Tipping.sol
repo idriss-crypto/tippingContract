@@ -21,7 +21,11 @@ error OnlyAdminCanWithdraw();
 error UnknownFunctionSelector();
 error WithdrawFailed();
 error RenounceOwnershipNotAllowed();
-error FeeHigherThanProvidedNativeCurrency(uint256 value, uint256 fee, uint256 msg);
+error FeeHigherThanProvidedNativeCurrency(
+    uint256 value,
+    uint256 fee,
+    uint256 msg
+);
 error UnsupportedAssetType();
 error PayingWithNative();
 
@@ -116,7 +120,12 @@ contract Tipping is
     ) internal returns (uint256 fee, uint256 value) {
         if (publicGoods[_recipient]) {
             if (SUPPORTS_EAS) {
-                _attestDonor(_recipient, _assetContractAddress, _amount, _tokenId);
+                _attestDonor(
+                    _recipient,
+                    _assetContractAddress,
+                    _amount,
+                    _tokenId
+                );
             }
         }
         (fee, value) = _splitPayment(_amount, _assetType, _recipient);
@@ -306,20 +315,10 @@ contract Tipping is
 
         for (uint256 i; i < calls.length; i++) {
             AssetType assetType = calls[i].assetType;
-            if (supportedERC20[calls[i].tokenAddress])
+            if (supportedERC20[calls[i].tokenAddress]) {
                 assetType = AssetType.SUPPORTED_ERC20;
-            if (assetType == AssetType.Native) {
-                (fee, paymentValue) = _beforeTransfer(
-                    assetType,
-                    calls[i].recipient,
-                    calls[i].amount,
-                    0,
-                    address(0)
-                );
-                _sendCoin(calls[i].recipient, paymentValue);
-                msgValueUsed += paymentValue;
-                msgFeeUsed += fee;
-            } else if (
+            }
+            if (
                 assetType == AssetType.ERC20 ||
                 assetType == AssetType.SUPPORTED_ERC20
             ) {
@@ -330,12 +329,12 @@ contract Tipping is
                     calls[i].tokenAddress
                 );
                 (fee, paymentValue) = _beforeTransfer(
-                        assetType,
-                        calls[i].recipient,
-                        amountIn,
-                        0,
-                        calls[i].tokenAddress
-                    );
+                    assetType,
+                    calls[i].recipient,
+                    amountIn,
+                    calls[i].tokenId,
+                    calls[i].tokenAddress
+                );
                 if (assetType == AssetType.ERC20) {
                     /** Fee is taken in native currency */
                     msgFeeUsed += fee;
@@ -345,10 +344,7 @@ contract Tipping is
                     calls[i].recipient,
                     calls[i].tokenAddress
                 );
-            } else if (
-                assetType == AssetType.ERC721 || assetType == AssetType.ERC1155
-            ) {
-                /** Here, msg.value can much bigger than overall fee, so the fee calculation should not throw an error. */
+            } else {
                 (fee, paymentValue) = _beforeTransfer(
                     assetType,
                     calls[i].recipient,
@@ -356,26 +352,37 @@ contract Tipping is
                     calls[i].tokenId,
                     calls[i].tokenAddress
                 );
-                if (assetType == AssetType.ERC721) {
-                    _sendERC721(
-                        calls[i].tokenId,
-                        msg.sender,
-                        calls[i].recipient,
-                        calls[i].tokenAddress
-                    );
+                if (assetType == AssetType.Native) {
+                    _sendCoin(calls[i].recipient, paymentValue);
+                    msgValueUsed += paymentValue;
+                    msgFeeUsed += fee;
+                } else if (
+                    assetType == AssetType.ERC721 ||
+                    assetType == AssetType.ERC1155
+                ) {
+                    /** Here, msg.value can much bigger than overall fee, so the fee calculation should not throw an error. */
+                    if (assetType == AssetType.ERC721) {
+                        _sendERC721(
+                            calls[i].tokenId,
+                            msg.sender,
+                            calls[i].recipient,
+                            calls[i].tokenAddress
+                        );
+                    } else {
+                        _sendERC1155(
+                            calls[i].tokenId,
+                            calls[i].amount,
+                            msg.sender,
+                            calls[i].recipient,
+                            calls[i].tokenAddress
+                        );
+                    }
+                    msgFeeUsed += fee;
                 } else {
-                    _sendERC1155(
-                        calls[i].tokenId,
-                        calls[i].amount,
-                        msg.sender,
-                        calls[i].recipient,
-                        calls[i].tokenAddress
-                    );
+                    revert UnsupportedAssetType();
                 }
-                msgFeeUsed += fee;
-            } else {
-                revert UnsupportedAssetType();
             }
+
             emit TipMessage(
                 calls[i].recipient,
                 calls[i].message,
@@ -388,7 +395,11 @@ contract Tipping is
             );
         }
         if (msg.value < msgValueUsed + msgFeeUsed) {
-            revert FeeHigherThanProvidedNativeCurrency( msgValueUsed, msgFeeUsed, msg.value );
+            revert FeeHigherThanProvidedNativeCurrency(
+                msgValueUsed,
+                msgFeeUsed,
+                msg.value
+            );
         }
     }
 

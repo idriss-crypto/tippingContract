@@ -158,30 +158,33 @@ abstract contract FeeCalculator is Ownable {
 
         for (uint256 i; i < calls.length; i++) {
             AssetType assetType = calls[i].assetType;
-            if (supportedERC20[calls[i].tokenAddress])
-                assetType = AssetType.SUPPORTED_ERC20;
+            resultCalls[i] = AdjustedBatchCall({
+                assetType: calls[i].assetType,
+                recipient: calls[i].recipient,
+                amount: calls[i].amount,
+                tokenId: calls[i].tokenId,
+                tokenAddress: calls[i].tokenAddress,
+                message: calls[i].message,
+                nativeAmount: 0
+            });
 
-            // Copying data from the original call
-            resultCalls[i].assetType = assetType;
-            resultCalls[i].recipient = calls[i].recipient;
-            resultCalls[i].amount = calls[i].amount;
-            resultCalls[i].tokenId = calls[i].tokenId;
-            resultCalls[i].tokenAddress = calls[i].tokenAddress;
-            resultCalls[i].message = calls[i].message;
+            if (supportedERC20[calls[i].tokenAddress]) {
+                resultCalls[i].assetType = AssetType.SUPPORTED_ERC20;
+            }
 
             uint256 paymentFee = getPaymentFee(
-                calls[i].amount,
-                assetType,
-                calls[i].recipient
+                resultCalls[i].amount,
+                resultCalls[i].assetType,
+                resultCalls[i].recipient
             );
 
             if (assetType == AssetType.Native) {
                 resultCalls[i].nativeAmount =
                     resultCalls[i].amount +
                     paymentFee;
-                resultCalls[i].amount = resultCalls[i].amount + paymentFee;
+                resultCalls[i].amount += paymentFee;
             } else if (assetType == AssetType.SUPPORTED_ERC20) {
-                resultCalls[i].amount = resultCalls[i].amount + paymentFee;
+                resultCalls[i].amount += paymentFee;
             } else if (
                 assetType == AssetType.ERC20 ||
                 assetType == AssetType.ERC721 ||
@@ -223,6 +226,17 @@ abstract contract FeeCalculator is Ownable {
         return MINIMAL_PAYMENT_FEE;
     }
 
+    function _calculateFixedFee() internal view returns (uint256 fee) {
+        uint256 minimalPaymentFee = _getMinimumFee();
+        uint256 slippageThreshold = (minimalPaymentFee * (100 - PAYMENT_FEE_SLIPPAGE_PERCENT)) / 100;
+
+        if (msg.value < slippageThreshold) {
+            revert ValueSentTooSmall();
+        }
+
+        return msg.value >= minimalPaymentFee ? minimalPaymentFee : msg.value;
+    }
+
     /**
      * @notice Calculates value of a fee from sent msg.value
      * @param _valueToSplit - payment value, taken from msg.value
@@ -235,26 +249,15 @@ abstract contract FeeCalculator is Ownable {
         AssetType _assetType,
         address _recipient
     ) internal view returns (uint256 fee, uint256 value) {
-        
-        uint256 minimalPaymentFee = _getMinimumFee();
-        uint256 paymentFee = _getPercentageFeePost(_valueToSplit);
 
         if (publicGoods[_recipient]) {
-            fee = 0;
-            value = _valueToSplit;
-        } else if (FEE_TYPE_MAPPING[_assetType] == FeeType.Percentage) {
-            fee = paymentFee;
+            return (0, _valueToSplit);
+        } 
+        if (FEE_TYPE_MAPPING[_assetType] == FeeType.Percentage) {
+            fee = _getPercentageFeePost(_valueToSplit);
             value = _valueToSplit - fee;
         } else {
-            // we accept slippage of native coin price if fee type is not percentage - it this case we always get % no matter dollar price
-            if (msg.value < (minimalPaymentFee * (100 - PAYMENT_FEE_SLIPPAGE_PERCENT)) / 100) {
-                revert ValueSentTooSmall();
-            }
-            if (msg.value >= minimalPaymentFee) {
-                fee = minimalPaymentFee;
-            } else {
-                fee = msg.value;
-            }
+            fee = _calculateFixedFee();
             value = _valueToSplit;
         }
     }
