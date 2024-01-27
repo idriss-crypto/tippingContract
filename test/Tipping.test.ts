@@ -1,20 +1,15 @@
-import {
-    time,
-    loadFixture,
-} from "@nomicfoundation/hardhat-toolbox/network-helpers";
 import {expect, use} from "chai";
 import {ethers} from "hardhat";
 import {Signer, Interface} from "ethers";
 
 import {
-    Tipping,
-    MockNFT,
-    MockToken,
-    MaticPriceAggregatorV3Mock,
-    MockEAS,
-    MockERC1155,
-} from "../src/types";
-import TippingArtifact from "../src/artifacts/src/contracts/Tipping.sol/Tipping.json";
+    ExtendedTipping,
+    ExtendedMockNFT,
+    ExtendedMockToken,
+    ExtendedMaticPriceAggregatorV3Mock,
+    ExtendedMockEAS,
+    ExtendedMockERC1155
+} from "../src/contracts/extendContracts";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const NFT_ID_ARRAY = [...Array(10).keys()];
@@ -43,13 +38,13 @@ describe("Tipping Contract", function () {
     let ownerAddress: string;
     let signer1Address: string;
     let signer2Address: string;
-    let mockToken: MockToken;
-    let mockToken2: MockToken;
-    let mockNFT: MockNFT;
-    let mockERC1155: MockERC1155;
-    let mockPriceOracle: MaticPriceAggregatorV3Mock;
-    let mockEAS: MockEAS;
-    let tippingContract: Tipping;
+    let mockToken: ExtendedMockToken;
+    let mockToken2: ExtendedMockToken;
+    let mockNFT: ExtendedMockNFT;
+    let mockERC1155: ExtendedMockERC1155;
+    let mockPriceOracle: ExtendedMaticPriceAggregatorV3Mock;
+    let mockEAS: ExtendedMockEAS;
+    let tippingContract: ExtendedTipping;
     let dollarInWei: bigint;
     let PAYMENT_FEE_PERCENTAGE: bigint;
     let PAYMENT_FEE_PERCENTAGE_DENOMINATOR: bigint;
@@ -107,13 +102,13 @@ describe("Tipping Contract", function () {
         const MaticPriceAggregatorV3MockFactory =
             await ethers.getContractFactory("MaticPriceAggregatorV3Mock");
         mockPriceOracle =
-            (await MaticPriceAggregatorV3MockFactory.deploy()) as MaticPriceAggregatorV3Mock;
+            (await MaticPriceAggregatorV3MockFactory.deploy()) as ExtendedMaticPriceAggregatorV3Mock;
         await mockPriceOracle.waitForDeployment();
 
         mockPriceOracle.address = await mockPriceOracle.getAddress();
 
         const MockEASFactory = await ethers.getContractFactory("MockEAS");
-        mockEAS = (await MockEASFactory.deploy()) as MockEAS;
+        mockEAS = (await MockEASFactory.deploy()) as ExtendedMockEAS;
         await mockEAS.waitForDeployment();
 
         mockEAS.address = await mockEAS.getAddress();
@@ -129,7 +124,7 @@ describe("Tipping Contract", function () {
             18,
             mockEAS.address,
             schema
-        )) as Tipping;
+        )) as ExtendedTipping;
         await tippingContract.waitForDeployment();
 
         tippingContract.address = await tippingContract.getAddress();
