@@ -299,6 +299,7 @@ describe("Tipping Contract", function () {
             expect(calculatedFeePG.toString()).to.equal("0");
             await tippingContract.deletePublicGood(signer2Address);
         });
+
         it("allows for sending native currency", async () => {
             const weiToReceive = BigInt("1000000");
             const calculatedFee = await tippingContract.getPaymentFee(
@@ -517,6 +518,7 @@ describe("Tipping Contract", function () {
                     calculatedFee
                 );
         });
+
         it("emits an Attested event", async () => {
             await tippingContract.addPublicGood(signer1Address);
 
@@ -535,9 +537,6 @@ describe("Tipping Contract", function () {
     });
 
     describe("Send ERC20", () => {
-        // beforeEach(async () => {
-        //     await setupToken();
-        // });
         it("properly calculates fee when sending asset", async () => {
             await tippingContract.addSupportedERC20(mockToken2.address);
             await tippingContract.addPublicGood(signer2Address);
@@ -1121,6 +1120,7 @@ describe("Tipping Contract", function () {
                     calculatedFee
                 );
         });
+
         it("emits an Attested event", async () => {
             await tippingContract.addPublicGood(signer1Address);
 
@@ -1145,11 +1145,6 @@ describe("Tipping Contract", function () {
     });
 
     describe("Send ERC721", () => {
-        // beforeEach(async () => {
-        //     await setupERC721();
-        // });
-        // });
-
         it("properly calculates fee when sending asset", async () => {
             await tippingContract.addPublicGood(signer2Address);
 
@@ -1382,6 +1377,7 @@ describe("Tipping Contract", function () {
                     dollarInWei
                 );
         });
+
         it("emits an Attested event", async () => {
             const assetIdToSend = 8;
             await tippingContract.addPublicGood(signer1Address);
@@ -1403,10 +1399,6 @@ describe("Tipping Contract", function () {
     });
 
     describe("Send ERC1155", () => {
-        // beforeEach(async () => {
-        //     await setupERC1155();
-        // });
-
         it("properly calculates fee when sending asset", async () => {
             await tippingContract.addPublicGood(signer2Address);
 
@@ -1774,6 +1766,186 @@ describe("Tipping Contract", function () {
                 .to.emit(mockEAS, "Attested")
                 .withArgs(ownerAddress, tippingContract.address, schema);
             await tippingContract.deletePublicGood(signer1Address);
+        });
+    });
+
+    describe("Send multiple assets", () => {
+
+        it("properly sends multiple assets", async () => {
+            await tippingContract.addSupportedERC20(mockToken2.address);
+
+            const nativeWeiToReceive = BigInt("1000000");
+            const erc20WeiToReceive = BigInt("2000000");
+            const supportedErc20WeiToReceive = BigInt("3000000");
+            const erc721ToReceive = BigInt("1");
+            const erc1155ToReceive = BigInt("7");
+            const erc721ID = BigInt("9");
+            const erc1155ID = BigInt("5");
+
+            const tippingContractSupportedERC20BalanceBefore =
+                await mockToken2.balanceOf(tippingContract.address);
+            const tippingContractNativeBalanceBefore =
+                await provider.getBalance(tippingContract.address);
+            const tippingContractERC20BalanceBefore = await mockToken.balanceOf(
+                tippingContract.address
+            );
+            const sig1ERC1155BalanceBefore = await mockERC1155.balanceOf(
+                signer1Address,
+                erc1155ID
+            );
+
+            const batchObject1 = {
+                assetType: AssetType.Native,
+                recipient: signer1Address,
+                amount: nativeWeiToReceive,
+                tokenId: 0,
+                tokenAddress: ZERO_ADDRESS,
+                message: "",
+            };
+            const batchObject2 = {
+                assetType: AssetType.ERC20,
+                recipient: signer1Address,
+                amount: erc20WeiToReceive,
+                tokenId: 0,
+                tokenAddress: mockToken.address,
+                message: "",
+            };
+            const batchObject3 = {
+                assetType: AssetType.SUPPORTED_ERC20,
+                recipient: signer1Address,
+                amount: supportedErc20WeiToReceive,
+                tokenId: 0,
+                tokenAddress: mockToken2.address,
+                message: "",
+            };
+            const batchObject4 = {
+                assetType: AssetType.ERC721,
+                recipient: signer1Address,
+                amount: erc721ToReceive,
+                tokenId: erc721ID,
+                tokenAddress: mockNFT.address,
+                message: "",
+            };
+            const batchObject5 = {
+                assetType: AssetType.ERC1155,
+                recipient: signer1Address,
+                amount: erc1155ToReceive,
+                tokenId: erc1155ID,
+                tokenAddress: mockERC1155.address,
+                message: "",
+            };
+
+            const batchSendObject = await tippingContract.calculateBatchFee([
+                batchObject1,
+                batchObject2,
+                batchObject3,
+                batchObject4,
+                batchObject5,
+            ]);
+
+            let nativeAmountToSend = BigInt(0);
+            let mockTokenAmountToSend = BigInt(0);
+            let mockToken2AmountToSend = BigInt(0);
+            let adjustedBatchSendObject = batchSendObject.map((call) => {
+                nativeAmountToSend += BigInt(call.nativeAmount);
+                if (call.tokenAddress == mockToken.address)
+                    mockTokenAmountToSend += BigInt(call.amount);
+                if (call.tokenAddress == mockToken2.address)
+                    mockToken2AmountToSend += BigInt(call.amount);
+                return {
+                    assetType: call.assetType,
+                    recipient: call.recipient,
+                    amount: call.amount,
+                    tokenId: call.tokenId,
+                    tokenAddress: call.tokenAddress,
+                    message: call.message,
+                };
+            });
+
+            await mockToken.increaseAllowance(
+                tippingContract.address,
+                mockTokenAmountToSend
+            );
+            await mockToken2.increaseAllowance(
+                tippingContract.address,
+                mockToken2AmountToSend
+            );
+
+            await mockNFT.approve(tippingContract.address, erc721ID);
+            await mockERC1155.setApprovalForAll(tippingContract.address, true);
+
+            await tippingContract.batchSendTo(adjustedBatchSendObject, {
+                value: nativeAmountToSend,
+            });
+
+            const tippingContractNativeBalanceAfter = await provider.getBalance(
+                tippingContract.address
+            );
+            const tippingContractERC20BalanceAfter = await mockToken.balanceOf(
+                tippingContract.address
+            );
+            const tippingContractSupportedERC20BalanceAfter =
+                await mockToken2.balanceOf(tippingContract.address);
+            const sig1ERC1155BalanceAfter = await mockERC1155.balanceOf(
+                signer1Address,
+                erc1155ID
+            );
+            expect(tippingContractNativeBalanceAfter).to.equal(
+                tippingContractNativeBalanceBefore
+                    + dollarInWei * BigInt(3)
+                    + nativeWeiToReceive/BigInt(100)
+            );
+            expect(tippingContractERC20BalanceAfter).to.equal(
+                tippingContractERC20BalanceBefore
+            );
+            expect(tippingContractSupportedERC20BalanceAfter).to.equal(
+                tippingContractSupportedERC20BalanceBefore + 
+                    supportedErc20WeiToReceive / BigInt(100)
+                
+            );
+            expect(sig1ERC1155BalanceAfter).to.equal(
+                sig1ERC1155BalanceBefore + erc1155ToReceive
+            );
+            expect(await mockNFT.ownerOf(erc721ID)).to.equal(signer1Address);
+        });
+
+        it("reverts when trying to send more than msg.value", async () => {
+            const tokensToSend = BigInt("1000000");
+            const weiToReceive = BigInt("1000000");
+            const calculatedFee = await tippingContract.getPaymentFee(
+                weiToReceive,
+                AssetType.Native,
+                signer1Address
+            );
+            const weiToSend = weiToReceive + calculatedFee;
+
+            await mockToken.increaseAllowance(
+                tippingContract.address,
+                tokensToSend
+            );
+
+            const batchObject1 = {
+                assetType: AssetType.Native,
+                recipient: signer1Address,
+                amount: weiToReceive,
+                tokenId: 0,
+                tokenAddress: ZERO_ADDRESS,
+                message: "",
+            };
+            const batchObject2 = {
+                assetType: AssetType.ERC20,
+                recipient: signer1Address,
+                amount: tokensToSend,
+                tokenId: 0,
+                tokenAddress: mockToken.address,
+                message: "",
+            };
+
+            await expect(
+                tippingContract.batchSendTo([batchObject1, batchObject2], {
+                    value: dollarInWei,
+                })
+            ).to.be.revertedWithCustomError(tippingContract, "FeeHigherThanProvidedNativeCurrency");
         });
     });
 });
