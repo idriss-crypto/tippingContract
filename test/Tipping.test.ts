@@ -1,6 +1,6 @@
 import {expect, use} from "chai";
 import {ethers} from "hardhat";
-import {Signer, Interface} from "ethers";
+import {Signer, Interface, BytesLike} from "ethers";
 
 import {
     ExtendedTipping,
@@ -48,21 +48,21 @@ describe("Tipping Contract", function () {
     let dollarInWei: bigint;
     let PAYMENT_FEE_PERCENTAGE: bigint;
     let PAYMENT_FEE_PERCENTAGE_DENOMINATOR: bigint;
-    let schema: String;
+    let schema: BytesLike;
 
     const setupToken = async () => {
         // Get the ContractFactory for your MockToken
         const MockToken = await ethers.getContractFactory("MockToken");
-        mockToken = await MockToken.deploy();
+        mockToken = (await MockToken.deploy()) as ExtendedMockToken;
         const MockToken2 = await ethers.getContractFactory("MockToken");
-        mockToken2 = await MockToken2.deploy();
+        mockToken2 = (await MockToken2.deploy()) as ExtendedMockToken;
         await mockToken.waitForDeployment();
         await mockToken2.waitForDeployment();
     };
     const setupERC721 = async () => {
         const MockNFT = await ethers.getContractFactory("MockNFT");
 
-        mockNFT = await MockNFT.deploy();
+        mockNFT = (await MockNFT.deploy()) as ExtendedMockNFT;
         await mockNFT.waitForDeployment();
 
         await Promise.all(
@@ -76,7 +76,7 @@ describe("Tipping Contract", function () {
     const setupERC1155 = async () => {
         const MockERC1155 = await ethers.getContractFactory("MockERC1155");
 
-        mockERC1155 = await MockERC1155.deploy();
+        mockERC1155 = (await MockERC1155.deploy()) as ExtendedMockERC1155;
         await mockERC1155.waitForDeployment();
 
         await Promise.all(
