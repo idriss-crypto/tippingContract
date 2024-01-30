@@ -8,11 +8,11 @@ import {
     ExtendedMockToken,
     ExtendedMaticPriceAggregatorV3Mock,
     ExtendedMockEAS,
-    ExtendedMockERC1155
+    ExtendedMockERC1155,
 } from "../src/contracts/extendContracts";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
-const NFT_ID_ARRAY = [...Array(10).keys()];
+const NFT_ID_ARRAY = [...Array(11).keys()];
 const ERC1155_ARRAY = [
     [0, 1],
     [1, 1],
@@ -49,6 +49,7 @@ describe("Tipping Contract", function () {
     let tippingContract_noOracle: ExtendedTipping;
     let tippingContract_noEAS_noOracle: ExtendedTipping;
     let dollarInWei: bigint;
+    let dollarInWeiFallback: bigint;
     let PAYMENT_FEE_PERCENTAGE: bigint;
     let PAYMENT_FEE_PERCENTAGE_DENOMINATOR: bigint;
     let NATIVE_WEI_MULTIPLIER: bigint;
@@ -107,7 +108,7 @@ describe("Tipping Contract", function () {
 
         FALLBACK_PRICE = BigInt("230000000000");
         FALLBACK_DECIMALS = BigInt("8");
-        NATIVE_WEI_MULTIPLIER = BigInt("10")**BigInt("18");
+        NATIVE_WEI_MULTIPLIER = BigInt("10") ** BigInt("18");
 
         const MaticPriceAggregatorV3MockFactory =
             await ethers.getContractFactory("MaticPriceAggregatorV3Mock");
@@ -148,7 +149,8 @@ describe("Tipping Contract", function () {
         )) as ExtendedTipping;
         await tippingContract_noEAS.waitForDeployment();
 
-        tippingContract_noEAS.address = await tippingContract_noEAS.getAddress();
+        tippingContract_noEAS.address =
+            await tippingContract_noEAS.getAddress();
 
         tippingContract_noOracle = (await TippingFactory.deploy(
             ZERO_ADDRESS,
@@ -161,7 +163,8 @@ describe("Tipping Contract", function () {
         )) as ExtendedTipping;
         await tippingContract_noOracle.waitForDeployment();
 
-        tippingContract_noOracle.address = await tippingContract_noOracle.getAddress();
+        tippingContract_noOracle.address =
+            await tippingContract_noOracle.getAddress();
 
         tippingContract_noEAS_noOracle = (await TippingFactory.deploy(
             ZERO_ADDRESS,
@@ -174,9 +177,13 @@ describe("Tipping Contract", function () {
         )) as ExtendedTipping;
         await tippingContract_noEAS_noOracle.waitForDeployment();
 
-        tippingContract_noEAS_noOracle.address = await tippingContract_noEAS_noOracle.getAddress();
+        tippingContract_noEAS_noOracle.address =
+            await tippingContract_noEAS_noOracle.getAddress();
 
         dollarInWei = await mockPriceOracle.dollarToWei();
+        dollarInWeiFallback =
+            (NATIVE_WEI_MULTIPLIER * BigInt("10") ** FALLBACK_DECIMALS) /
+            FALLBACK_PRICE;
         PAYMENT_FEE_PERCENTAGE = BigInt("10");
         PAYMENT_FEE_PERCENTAGE_DENOMINATOR = BigInt("1000");
 
@@ -246,18 +253,18 @@ describe("Tipping Contract", function () {
         });
 
         it("properly adds and deletes EAS support", async () => {
-            expect(await tippingContract_noEAS.SUPPORTS_EAS()).to.be
-                .false;
+            expect(await tippingContract_noEAS.SUPPORTS_EAS()).to.be.false;
 
-            await tippingContract_noEAS.enableEASSupport(mockEAS.address, schema);
+            await tippingContract_noEAS.enableEASSupport(
+                mockEAS.address,
+                schema
+            );
 
-            expect(await tippingContract_noEAS.SUPPORTS_EAS()).to.be
-                .true;
+            expect(await tippingContract_noEAS.SUPPORTS_EAS()).to.be.true;
 
             await tippingContract_noEAS.disableEASSupport();
 
-            expect(await tippingContract_noEAS.SUPPORTS_EAS()).to.be
-                .false;
+            expect(await tippingContract_noEAS.SUPPORTS_EAS()).to.be.false;
         });
 
         // it.only("properly adds and deletes Chainlink support", async () => {
@@ -279,27 +286,34 @@ describe("Tipping Contract", function () {
             expect(await tippingContract.admins(ownerAddress)).to.be.true;
             expect(await tippingContract.admins(signer1Address)).to.be.false;
 
-            await mockToken.connect(owner).transfer(tippingContract.address, BigInt("1000"))
+            await mockToken
+                .connect(owner)
+                .transfer(tippingContract.address, BigInt("1000"));
 
-            const ownerTokenBalanceBefore = await mockToken.balanceOf(ownerAddress);
+            const ownerTokenBalanceBefore = await mockToken.balanceOf(
+                ownerAddress
+            );
 
+            await expect(tippingContract.connect(signer1).withdraw()).to.not.be
+                .rejected;
             await expect(
-                tippingContract.connect(signer1).withdraw()
-            ).to.not.be.rejected;
-            await expect(
-                tippingContract.connect(signer1).withdrawToken(mockToken.address)
+                tippingContract
+                    .connect(signer1)
+                    .withdrawToken(mockToken.address)
             ).to.not.be.rejected;
             await expect(tippingContract.withdraw()).to.not.be.rejected;
 
-            const ownerTokenBalanceAfter = await mockToken.balanceOf(ownerAddress);
-            const signer1TokenBalanceAfter = await mockToken.balanceOf(signer1Address);
+            const ownerTokenBalanceAfter = await mockToken.balanceOf(
+                ownerAddress
+            );
+            const signer1TokenBalanceAfter = await mockToken.balanceOf(
+                signer1Address
+            );
 
             expect(ownerTokenBalanceAfter).to.equal(
                 ownerTokenBalanceBefore + BigInt("1000")
             );
-            expect(signer1TokenBalanceAfter).to.equal(
-                signer1TokenBalanceAfter
-            );
+            expect(signer1TokenBalanceAfter).to.equal(signer1TokenBalanceAfter);
         });
 
         it("allows only owner to change owner", async () => {
@@ -341,7 +355,7 @@ describe("Tipping Contract", function () {
             // Fee is on top in the new design:
             // protocol forwards x. Here x+1% = weiToSend
 
-            for (let contract of [tippingContract, tippingContract_noOracle]){
+            for (let contract of [tippingContract, tippingContract_noOracle]) {
                 const weiToSend = BigInt("1000000");
                 const expectedProtocolFee =
                     (weiToSend * PAYMENT_FEE_PERCENTAGE) /
@@ -600,8 +614,7 @@ describe("Tipping Contract", function () {
                 tippingContract_noEAS.sendNativeTo(signer1Address, "", {
                     value: weiToSend,
                 })
-            )
-                .to.not.emit(mockEAS, "Attested");
+            ).to.not.emit(mockEAS, "Attested");
 
             await tippingContract.disableEASSupport();
 
@@ -609,10 +622,9 @@ describe("Tipping Contract", function () {
                 tippingContract.sendNativeTo(signer1Address, "", {
                     value: weiToSend,
                 })
-            )
-                .to.not.emit(mockEAS, "Attested");
+            ).to.not.emit(mockEAS, "Attested");
 
-            await tippingContract.enableEASSupport(mockEAS.address, schema);  
+            await tippingContract.enableEASSupport(mockEAS.address, schema);
 
             await tippingContract.deletePublicGood(signer1Address);
         });
@@ -621,7 +633,9 @@ describe("Tipping Contract", function () {
     describe("Send ERC20", () => {
         it("properly calculates fee when sending asset", async () => {
             await tippingContract.addSupportedERC20(mockToken2.address);
-            await tippingContract_noOracle.addSupportedERC20(mockToken2.address);
+            await tippingContract_noOracle.addSupportedERC20(
+                mockToken2.address
+            );
             await tippingContract.addPublicGood(signer2Address);
             await tippingContract_noOracle.addPublicGood(signer2Address);
 
@@ -651,7 +665,8 @@ describe("Tipping Contract", function () {
             expect(calculatedFeeNonPGNonSupported).to.equal(
                 expectedProtocolFeeNonPGNonSupported
             );
-            const expectedProtocolFeeNonPGNonSupported_noOracle = (NATIVE_WEI_MULTIPLIER * BigInt("10")**FALLBACK_DECIMALS) / FALLBACK_PRICE;
+            const expectedProtocolFeeNonPGNonSupported_noOracle =
+                dollarInWeiFallback;
             const calculatedFeeNonPGNonSupported_noOracle =
                 await tippingContract_noOracle.getPaymentFee(
                     tokenToSend,
@@ -683,10 +698,14 @@ describe("Tipping Contract", function () {
                 );
             expect(calculatedFeePGSupported).to.equal(expectedProtocolFeePG);
             expect(calculatedFeePGNonSupported).to.equal(expectedProtocolFeePG);
-            expect(calculatedFeePGNonSupported_noOracle).to.equal(expectedProtocolFeePG);
+            expect(calculatedFeePGNonSupported_noOracle).to.equal(
+                expectedProtocolFeePG
+            );
 
             await tippingContract.deleteSupportedERC20(mockToken2.address);
-            await tippingContract_noOracle.deleteSupportedERC20(mockToken2.address);
+            await tippingContract_noOracle.deleteSupportedERC20(
+                mockToken2.address
+            );
             await tippingContract.deletePublicGood(signer2Address);
             await tippingContract_noOracle.deletePublicGood(signer2Address);
         });
@@ -1224,12 +1243,17 @@ describe("Tipping Contract", function () {
                 );
         });
 
-        it("emits an Attested event", async () => {
+        it("Correctly emits an Attested event", async () => {
             await tippingContract.addPublicGood(signer1Address);
+            await tippingContract_noEAS.addPublicGood(signer1Address);
 
             const tokensToSend = BigInt("1000000");
             await mockToken.increaseAllowance(
                 tippingContract.address,
+                tokensToSend * BigInt("2")
+            );
+            await mockToken.increaseAllowance(
+                tippingContract_noEAS.address,
                 tokensToSend
             );
             await expect(
@@ -1243,13 +1267,39 @@ describe("Tipping Contract", function () {
             )
                 .to.emit(mockEAS, "Attested")
                 .withArgs(ownerAddress, tippingContract.address, schema);
+
+            await expect(
+                tippingContract_noEAS.sendERC20To(
+                    signer1Address,
+                    tokensToSend,
+                    mockToken.address,
+                    "",
+                    {value: 0}
+                )
+            ).to.not.emit(mockEAS, "Attested");
+
+            await tippingContract.disableEASSupport();
+
+            await expect(
+                tippingContract.sendERC20To(
+                    signer1Address,
+                    tokensToSend,
+                    mockToken.address,
+                    "",
+                    {value: 0}
+                )
+            ).to.not.emit(mockEAS, "Attested");
+
+            await tippingContract.enableEASSupport(mockEAS.address, schema);
             await tippingContract.deletePublicGood(signer1Address);
+            await tippingContract_noEAS.deletePublicGood(signer1Address);
         });
     });
 
     describe("Send ERC721", () => {
         it("properly calculates fee when sending asset", async () => {
             await tippingContract.addPublicGood(signer2Address);
+            await tippingContract_noOracle.addPublicGood(signer2Address);
 
             const tokenToSend = 1;
 
@@ -1264,10 +1314,26 @@ describe("Tipping Contract", function () {
                 signer2Address
             );
 
+            const calculatedFeeNonPG_noOracle =
+                await tippingContract_noOracle.getPaymentFee(
+                    tokenToSend,
+                    AssetType.ERC721,
+                    signer1Address
+                );
+            const calculatedFeePG_noOracle =
+                await tippingContract_noOracle.getPaymentFee(
+                    tokenToSend,
+                    AssetType.ERC721,
+                    signer2Address
+                );
+
             expect(calculatedFeeNonPG).to.equal(dollarInWei);
+            expect(calculatedFeeNonPG_noOracle).to.equal(dollarInWeiFallback);
             expect(calculatedFeePG).to.equal(0);
+            expect(calculatedFeePG_noOracle).to.equal(0);
 
             await tippingContract.deletePublicGood(signer2Address);
+            await tippingContract_noOracle.deletePublicGood(signer2Address);
         });
 
         it("allows for sending asset to other address", async () => {
@@ -1481,15 +1547,20 @@ describe("Tipping Contract", function () {
                 );
         });
 
-        it("emits an Attested event", async () => {
-            const assetIdToSend = 8;
+        it("Correctly emits an Attested event", async () => {
+            const assetIdToSend1 = 8;
+            const assetIdToSend2 = 9;
             await tippingContract.addPublicGood(signer1Address);
 
-            await mockNFT.approve(tippingContract.address, assetIdToSend);
+            await mockNFT.approve(tippingContract.address, assetIdToSend1);
+            await mockNFT.approve(
+                tippingContract_noEAS.address,
+                assetIdToSend2
+            );
             await expect(
                 tippingContract.sendERC721To(
                     signer1Address,
-                    assetIdToSend,
+                    assetIdToSend1,
                     mockNFT.address,
                     "",
                     {value: dollarInWei}
@@ -1497,6 +1568,16 @@ describe("Tipping Contract", function () {
             )
                 .to.emit(mockEAS, "Attested")
                 .withArgs(ownerAddress, tippingContract.address, schema);
+
+            await expect(
+                tippingContract_noEAS.sendERC721To(
+                    signer1Address,
+                    assetIdToSend2,
+                    mockNFT.address,
+                    "",
+                    {value: dollarInWei}
+                )
+            ).to.not.emit(mockEAS, "Attested");
             await tippingContract.deletePublicGood(signer1Address);
         });
     });
@@ -1504,6 +1585,7 @@ describe("Tipping Contract", function () {
     describe("Send ERC1155", () => {
         it("properly calculates fee when sending asset", async () => {
             await tippingContract.addPublicGood(signer2Address);
+            await tippingContract_noOracle.addPublicGood(signer2Address);
 
             const tokenToSend = 1;
 
@@ -1518,10 +1600,26 @@ describe("Tipping Contract", function () {
                 signer2Address
             );
 
+            const calculatedFeeNonPG_noOracle =
+                await tippingContract_noOracle.getPaymentFee(
+                    tokenToSend,
+                    AssetType.ERC1155,
+                    signer1Address
+                );
+            const calculatedFeePG_noOracle =
+                await tippingContract_noOracle.getPaymentFee(
+                    tokenToSend,
+                    AssetType.ERC1155,
+                    signer2Address
+                );
+
             expect(calculatedFeeNonPG).to.equal(dollarInWei);
+            expect(calculatedFeeNonPG_noOracle).to.equal(dollarInWeiFallback);
             expect(calculatedFeePG).to.equal(0);
+            expect(calculatedFeePG_noOracle).to.equal(0);
 
             await tippingContract.deletePublicGood(signer2Address);
+            await tippingContract_noOracle.deletePublicGood(signer2Address);
         });
 
         it("allows for sending asset to other address", async () => {
@@ -1849,12 +1947,18 @@ describe("Tipping Contract", function () {
                     dollarInWei
                 );
         });
-        it("emits an Attested event", async () => {
+
+        it("Correctly emits an Attested event", async () => {
             await tippingContract.addPublicGood(signer1Address);
+            await tippingContract_noEAS.addPublicGood(signer1Address);
 
             const amountToSend = 5;
             const IdToSend = 4;
             await mockERC1155.setApprovalForAll(tippingContract.address, true);
+            await mockERC1155.setApprovalForAll(
+                tippingContract_noEAS.address,
+                true
+            );
 
             await expect(
                 tippingContract.sendERC1155To(
@@ -1868,12 +1972,24 @@ describe("Tipping Contract", function () {
             )
                 .to.emit(mockEAS, "Attested")
                 .withArgs(ownerAddress, tippingContract.address, schema);
+
+            await expect(
+                tippingContract_noEAS.sendERC1155To(
+                    signer1Address,
+                    IdToSend,
+                    amountToSend,
+                    mockERC1155.address,
+                    "",
+                    {value: dollarInWei}
+                )
+            ).to.not.emit(mockEAS, "Attested");
+
             await tippingContract.deletePublicGood(signer1Address);
+            await tippingContract_noEAS.deletePublicGood(signer1Address);
         });
     });
 
     describe("Send multiple assets", () => {
-
         it("properly sends multiple assets", async () => {
             await tippingContract.addSupportedERC20(mockToken2.address);
 
@@ -1882,7 +1998,7 @@ describe("Tipping Contract", function () {
             const supportedErc20WeiToReceive = BigInt("3000000");
             const erc721ToReceive = BigInt("1");
             const erc1155ToReceive = BigInt("7");
-            const erc721ID = BigInt("9");
+            const erc721ID = BigInt("10");
             const erc1155ID = BigInt("5");
 
             const tippingContractSupportedERC20BalanceBefore =
@@ -1994,17 +2110,16 @@ describe("Tipping Contract", function () {
                 erc1155ID
             );
             expect(tippingContractNativeBalanceAfter).to.equal(
-                tippingContractNativeBalanceBefore
-                    + dollarInWei * BigInt(3)
-                    + nativeWeiToReceive/BigInt(100)
+                tippingContractNativeBalanceBefore +
+                    dollarInWei * BigInt(3) +
+                    nativeWeiToReceive / BigInt(100)
             );
             expect(tippingContractERC20BalanceAfter).to.equal(
                 tippingContractERC20BalanceBefore
             );
             expect(tippingContractSupportedERC20BalanceAfter).to.equal(
-                tippingContractSupportedERC20BalanceBefore + 
+                tippingContractSupportedERC20BalanceBefore +
                     supportedErc20WeiToReceive / BigInt(100)
-                
             );
             expect(sig1ERC1155BalanceAfter).to.equal(
                 sig1ERC1155BalanceBefore + erc1155ToReceive
@@ -2042,11 +2157,14 @@ describe("Tipping Contract", function () {
                 tippingContract.batchSendTo([batchObject1, batchObject2], {
                     value: dollarInWei,
                 })
-            ).to.be.revertedWithCustomError(tippingContract, "FeeHigherThanProvidedNativeCurrency");
+            ).to.be.revertedWithCustomError(
+                tippingContract,
+                "FeeHigherThanProvidedNativeCurrency"
+            );
         });
     });
 
-    describe("More custom revert errors", () => {
+    describe("More (custom) revert errors", () => {
         it("reverts when trying to send unsupported assetType in batch", async () => {
             const weiToSend = BigInt("1000000");
 
@@ -2065,5 +2183,5 @@ describe("Tipping Contract", function () {
                 })
             ).to.be.revertedWithoutReason(); // Not detecting custom error
         });
-    })
+    });
 });
