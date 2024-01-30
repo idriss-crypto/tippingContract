@@ -42,15 +42,12 @@ contract Tipping is
     MultiAssetSender,
     FeeCalculator
 {
-    bool public SUPPORTS_CHAINLINK;
     bool public SUPPORTS_EAS;
     mapping(address => bool) public admins;
 
     using SafeERC20 for IERC20;
 
     constructor(
-        bool _supportsChainlink,
-        bool _supportsEAS,
         address _nativeUsdAggregator,
         address _sequencerAddress,
         uint256 _stalenessThreshold,
@@ -75,8 +72,9 @@ contract Tipping is
         FEE_TYPE_MAPPING[AssetType.ERC721] = FeeType.Constant;
         FEE_TYPE_MAPPING[AssetType.ERC1155] = FeeType.Constant;
         FEE_TYPE_MAPPING[AssetType.SUPPORTED_ERC20] = FeeType.Percentage;
-        SUPPORTS_CHAINLINK = _supportsChainlink;
-        SUPPORTS_EAS = _supportsEAS;
+        
+        SUPPORTS_CHAINLINK = _nativeUsdAggregator == address(0)? false : true;
+        SUPPORTS_EAS = _eas == address(0)? false : true;
     }
 
     event TipMessage(
@@ -95,13 +93,6 @@ contract Tipping is
             revert OnlyAdminMethod();
         }
         _;
-    }
-
-    function _getMinimumFee() internal view override returns (uint256) {
-        if (SUPPORTS_CHAINLINK) {
-            return _getMinimumFeeOracle();
-        }
-        return _getMinimumFeeSimple();
     }
 
     /**
