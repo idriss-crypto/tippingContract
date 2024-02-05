@@ -2,19 +2,19 @@
 pragma solidity 0.8.19;
 
 /**
- * @title MaticPriceAggregatorV3Mock
+ * @title NativePriceAggregatorV3Mock
  * @author Rafał Kalinowski
- * @notice mock MaticPriceAffregatorV3
+ * @notice mock NativePriceAggregatorV3
  * custom:experimental used only as a mock for tests
  */
-contract MaticPriceAggregatorV3Mock {
+contract NativePriceAggregatorV3Mock {
    int256 price = 230000000000;
   function decimals() public pure returns (uint8) {
      return 8;
   }
 
   function description() external pure returns (string memory) {
-     return "MATIC -> USD Mock";
+     return "Native -> USD Mock";
   }
 
   function version() external pure returns (uint256) {
@@ -69,11 +69,11 @@ contract MaticPriceAggregatorV3Mock {
    }
 
     function dollarToWei() external view returns (uint256) {
-        (,int256 maticPrice,,,) = latestRoundData();
-        require (maticPrice > 0, "Unable to retrieve MATIC price.");
+        (,int256 nativePrice,,,) = latestRoundData();
+        require (nativePrice > 0, "Unable to retrieve NATIVE price.");
 
-        uint256 maticPriceMultiplier = 10**decimals();
+        uint256 nativePriceMultiplier = 10**decimals();
 
-        return(10**18 * maticPriceMultiplier) / uint256(maticPrice);
+        return(10**18 * nativePriceMultiplier) / uint256(nativePrice);
     }
 }

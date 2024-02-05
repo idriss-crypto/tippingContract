@@ -3,7 +3,7 @@ import {
     Tipping as TippingInterface,
     MockNFT as MockNFTInterface,
     MockToken as MockTokenInterface,
-    MaticPriceAggregatorV3Mock as MaticPriceAggregatorV3MockInterface,
+    NativePriceAggregatorV3Mock as NativePriceAggregatorV3MockInterface,
     MockEAS as MockEASInterface,
     MockERC1155 as MockERC1155Interface,
 } from "../types";
@@ -22,7 +22,7 @@ export interface ExtendedMockToken extends MockTokenInterface {
     address: AddressLike;
 }
 
-export interface ExtendedMaticPriceAggregatorV3Mock extends MaticPriceAggregatorV3MockInterface {
+export interface ExtendedNativePriceAggregatorV3Mock extends NativePriceAggregatorV3MockInterface {
     address: AddressLike;
 }
 

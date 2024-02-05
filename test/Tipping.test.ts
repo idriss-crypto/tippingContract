@@ -6,7 +6,7 @@ import {
     ExtendedTipping,
     ExtendedMockNFT,
     ExtendedMockToken,
-    ExtendedMaticPriceAggregatorV3Mock,
+    ExtendedNativePriceAggregatorV3Mock,
     ExtendedMockEAS,
     ExtendedMockERC1155,
 } from "../src/contracts/extendContracts";
@@ -42,7 +42,7 @@ describe("Tipping Contract", function () {
     let mockToken2: ExtendedMockToken;
     let mockNFT: ExtendedMockNFT;
     let mockERC1155: ExtendedMockERC1155;
-    let mockPriceOracle: ExtendedMaticPriceAggregatorV3Mock;
+    let mockPriceOracle: ExtendedNativePriceAggregatorV3Mock;
     let mockEAS: ExtendedMockEAS;
     let tippingContract: ExtendedTipping;
     let tippingContract_noEAS: ExtendedTipping;
@@ -110,10 +110,10 @@ describe("Tipping Contract", function () {
         FALLBACK_DECIMALS = BigInt("8");
         NATIVE_WEI_MULTIPLIER = BigInt("10") ** BigInt("18");
 
-        const MaticPriceAggregatorV3MockFactory =
-            await ethers.getContractFactory("MaticPriceAggregatorV3Mock");
+        const NativePriceAggregatorV3MockFactory =
+            await ethers.getContractFactory("NativePriceAggregatorV3Mock");
         mockPriceOracle =
-            (await MaticPriceAggregatorV3MockFactory.deploy()) as ExtendedMaticPriceAggregatorV3Mock;
+            (await NativePriceAggregatorV3MockFactory.deploy()) as ExtendedNativePriceAggregatorV3Mock;
         await mockPriceOracle.waitForDeployment();
 
         mockPriceOracle.address = await mockPriceOracle.getAddress();
