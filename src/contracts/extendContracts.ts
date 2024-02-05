@@ -4,6 +4,7 @@ import {
     MockNFT as MockNFTInterface,
     MockToken as MockTokenInterface,
     NativePriceAggregatorV3Mock as NativePriceAggregatorV3MockInterface,
+    NativePriceAggregatorV3SequencerMock as NativePriceAggregatorV3SequencerMockInterface,
     MockEAS as MockEASInterface,
     MockERC1155 as MockERC1155Interface,
 } from "../types";
@@ -23,6 +24,10 @@ export interface ExtendedMockToken extends MockTokenInterface {
 }
 
 export interface ExtendedNativePriceAggregatorV3Mock extends NativePriceAggregatorV3MockInterface {
+    address: AddressLike;
+}
+
+export interface ExtendedNativePriceAggregatorV3SequencerMock extends NativePriceAggregatorV3SequencerMockInterface {
     address: AddressLike;
 }
 

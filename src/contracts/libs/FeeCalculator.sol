@@ -121,6 +121,7 @@ abstract contract FeeCalculator is Ownable {
                                 nativePriceMultiplier =
                                     10 ** NATIVE_USD_PRICE_FEED.decimals();
                             }
+                            // Else use fallback values
                         } catch {
                             // Use fallback values
                         }

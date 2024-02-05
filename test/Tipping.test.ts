@@ -7,6 +7,7 @@ import {
     ExtendedMockNFT,
     ExtendedMockToken,
     ExtendedNativePriceAggregatorV3Mock,
+    ExtendedNativePriceAggregatorV3SequencerMock,
     ExtendedMockEAS,
     ExtendedMockERC1155,
 } from "../src/contracts/extendContracts";
@@ -43,6 +44,7 @@ describe("Tipping Contract", function () {
     let mockNFT: ExtendedMockNFT;
     let mockERC1155: ExtendedMockERC1155;
     let mockPriceOracle: ExtendedNativePriceAggregatorV3Mock;
+    let mockPriceSequencer: ExtendedNativePriceAggregatorV3SequencerMock;
     let mockEAS: ExtendedMockEAS;
     let tippingContract: ExtendedTipping;
     let tippingContract_noEAS: ExtendedTipping;
@@ -118,6 +120,16 @@ describe("Tipping Contract", function () {
 
         mockPriceOracle.address = await mockPriceOracle.getAddress();
 
+        const NativePriceAggregatorV3SequencerMockFactory =
+            await ethers.getContractFactory(
+                "NativePriceAggregatorV3SequencerMock"
+            );
+        mockPriceSequencer =
+            (await NativePriceAggregatorV3SequencerMockFactory.deploy()) as ExtendedNativePriceAggregatorV3SequencerMock;
+        await mockPriceSequencer.waitForDeployment();
+
+        mockPriceSequencer.address = await mockPriceSequencer.getAddress();
+
         const MockEASFactory = await ethers.getContractFactory("MockEAS");
         mockEAS = (await MockEASFactory.deploy()) as ExtendedMockEAS;
         await mockEAS.waitForDeployment();
@@ -127,8 +139,8 @@ describe("Tipping Contract", function () {
         const TippingFactory = await ethers.getContractFactory("Tipping");
         tippingContract = (await TippingFactory.deploy(
             mockPriceOracle.address,
-            ZERO_ADDRESS,
-            0,
+            mockPriceSequencer.address,
+            3600,
             FALLBACK_PRICE,
             FALLBACK_DECIMALS,
             mockEAS.address,
@@ -140,8 +152,8 @@ describe("Tipping Contract", function () {
 
         tippingContract_noEAS = (await TippingFactory.deploy(
             mockPriceOracle.address,
-            ZERO_ADDRESS,
-            0,
+            mockPriceSequencer.address,
+            3600,
             FALLBACK_PRICE,
             FALLBACK_DECIMALS,
             ZERO_ADDRESS,
@@ -271,7 +283,11 @@ describe("Tipping Contract", function () {
             expect(await tippingContract_noOracle.SUPPORTS_CHAINLINK()).to.be
                 .false;
 
-            await tippingContract_noOracle.enableChainlinkSupport(mockPriceOracle.address, ZERO_ADDRESS, 0);
+            await tippingContract_noOracle.enableChainlinkSupport(
+                mockPriceOracle.address,
+                ZERO_ADDRESS,
+                0
+            );
 
             expect(await tippingContract_noOracle.SUPPORTS_CHAINLINK()).to.be
                 .true;
@@ -357,7 +373,12 @@ describe("Tipping Contract", function () {
             // Fee is on top in the new design:
             // protocol forwards x. Here x+1% = weiToSend
 
-            for (let contract of [tippingContract, tippingContract_noOracle, tippingContract_noEAS, tippingContract_noEAS_noOracle]) {
+            for (let contract of [
+                tippingContract,
+                tippingContract_noOracle,
+                tippingContract_noEAS,
+                tippingContract_noEAS_noOracle,
+            ]) {
                 const weiToSend = BigInt("1000000");
                 const expectedProtocolFee =
                     (weiToSend * PAYMENT_FEE_PERCENTAGE) /
@@ -714,11 +735,11 @@ describe("Tipping Contract", function () {
                     signer2Address
                 );
             const calculatedFeePGNonSupported_noEAS_noOracle =
-            await tippingContract_noEAS_noOracle.getPaymentFee(
-                tokenToSend,
-                AssetType.ERC20,
-                signer2Address
-            );
+                await tippingContract_noEAS_noOracle.getPaymentFee(
+                    tokenToSend,
+                    AssetType.ERC20,
+                    signer2Address
+                );
             expect(calculatedFeePGSupported).to.equal(expectedProtocolFeePG);
             expect(calculatedFeePGNonSupported).to.equal(expectedProtocolFeePG);
             expect(calculatedFeePGNonSupported_noOracle).to.equal(
@@ -737,7 +758,9 @@ describe("Tipping Contract", function () {
             );
             await tippingContract.deletePublicGood(signer2Address);
             await tippingContract_noOracle.deletePublicGood(signer2Address);
-            await tippingContract_noEAS_noOracle.deletePublicGood(signer2Address);
+            await tippingContract_noEAS_noOracle.deletePublicGood(
+                signer2Address
+            );
         });
 
         it("allows for sending unsupported ERC20 asset to other address", async () => {
@@ -903,7 +926,12 @@ describe("Tipping Contract", function () {
         });
 
         it("allows sending supported ERC20 to non-pg addresses as batch", async () => {
-            for (let contract of [tippingContract, tippingContract_noEAS, tippingContract_noOracle, tippingContract_noEAS_noOracle]) {
+            for (let contract of [
+                tippingContract,
+                tippingContract_noEAS,
+                tippingContract_noOracle,
+                tippingContract_noEAS_noOracle,
+            ]) {
                 await contract.addSupportedERC20(mockToken.address);
 
                 const weiToReceive1 = BigInt("1000000");
@@ -911,11 +939,14 @@ describe("Tipping Contract", function () {
                 const tippingContractBalanceBefore = await provider.getBalance(
                     contract.address
                 );
-                const tippingContractTokenBalanceBefore = await mockToken.balanceOf(
-                    contract.address
+                const tippingContractTokenBalanceBefore =
+                    await mockToken.balanceOf(contract.address);
+                const sig1BalanceBefore = await mockToken.balanceOf(
+                    signer1Address
                 );
-                const sig1BalanceBefore = await mockToken.balanceOf(signer1Address);
-                const sig2BalanceBefore = await mockToken.balanceOf(signer2Address);
+                const sig2BalanceBefore = await mockToken.balanceOf(
+                    signer2Address
+                );
 
                 const batchObject1 = {
                     assetType: AssetType.SUPPORTED_ERC20,
@@ -964,11 +995,14 @@ describe("Tipping Contract", function () {
                 const tippingContractBalanceAfter = await provider.getBalance(
                     contract.address
                 );
-                const tippingContractTokenBalanceAfter = await mockToken.balanceOf(
-                    contract.address
+                const tippingContractTokenBalanceAfter =
+                    await mockToken.balanceOf(contract.address);
+                const sig1BalanceAfter = await mockToken.balanceOf(
+                    signer1Address
                 );
-                const sig1BalanceAfter = await mockToken.balanceOf(signer1Address);
-                const sig2BalanceAfter = await mockToken.balanceOf(signer2Address);
+                const sig2BalanceAfter = await mockToken.balanceOf(
+                    signer2Address
+                );
 
                 expect(sig1BalanceAfter).to.equal(
                     sig1BalanceBefore + weiToReceive1
@@ -991,7 +1025,12 @@ describe("Tipping Contract", function () {
         });
 
         it("allows sending supported ERC20 to non-pg and pg addresses as batch", async () => {
-            for (let contract of [tippingContract, tippingContract_noEAS, tippingContract_noOracle, tippingContract_noEAS_noOracle]) {
+            for (let contract of [
+                tippingContract,
+                tippingContract_noEAS,
+                tippingContract_noOracle,
+                tippingContract_noEAS_noOracle,
+            ]) {
                 await contract.addSupportedERC20(mockToken.address);
                 await contract.addPublicGood(signer2Address);
 
@@ -1000,11 +1039,14 @@ describe("Tipping Contract", function () {
                 const tippingContractBalanceBefore = await provider.getBalance(
                     contract.address
                 );
-                const tippingContractTokenBalanceBefore = await mockToken.balanceOf(
-                    contract.address
+                const tippingContractTokenBalanceBefore =
+                    await mockToken.balanceOf(contract.address);
+                const sig1BalanceBefore = await mockToken.balanceOf(
+                    signer1Address
                 );
-                const sig1BalanceBefore = await mockToken.balanceOf(signer1Address);
-                const sig2BalanceBefore = await mockToken.balanceOf(signer2Address);
+                const sig2BalanceBefore = await mockToken.balanceOf(
+                    signer2Address
+                );
 
                 const batchObject1 = {
                     assetType: AssetType.SUPPORTED_ERC20,
@@ -1053,11 +1095,14 @@ describe("Tipping Contract", function () {
                 const tippingContractBalanceAfter = await provider.getBalance(
                     contract.address
                 );
-                const tippingContractTokenBalanceAfter = await mockToken.balanceOf(
-                    contract.address
+                const tippingContractTokenBalanceAfter =
+                    await mockToken.balanceOf(contract.address);
+                const sig1BalanceAfter = await mockToken.balanceOf(
+                    signer1Address
                 );
-                const sig1BalanceAfter = await mockToken.balanceOf(signer1Address);
-                const sig2BalanceAfter = await mockToken.balanceOf(signer2Address);
+                const sig2BalanceAfter = await mockToken.balanceOf(
+                    signer2Address
+                );
 
                 expect(sig1BalanceAfter).to.equal(
                     sig1BalanceBefore + weiToReceive1
@@ -1081,17 +1126,25 @@ describe("Tipping Contract", function () {
         });
 
         it("allows sending unsupported ERC20 to non-pg addresses as batch", async () => {
-            for (let contract of [tippingContract, tippingContract_noEAS, tippingContract_noOracle, tippingContract_noEAS_noOracle]) {
+            for (let contract of [
+                tippingContract,
+                tippingContract_noEAS,
+                tippingContract_noOracle,
+                tippingContract_noEAS_noOracle,
+            ]) {
                 const weiToReceive1 = BigInt("1000000");
                 const weiToReceive2 = BigInt("2500000");
                 const tippingContractBalanceBefore = await provider.getBalance(
                     contract.address
                 );
-                const tippingContractTokenBalanceBefore = await mockToken.balanceOf(
-                    contract.address
+                const tippingContractTokenBalanceBefore =
+                    await mockToken.balanceOf(contract.address);
+                const sig1BalanceBefore = await mockToken.balanceOf(
+                    signer1Address
                 );
-                const sig1BalanceBefore = await mockToken.balanceOf(signer1Address);
-                const sig2BalanceBefore = await mockToken.balanceOf(signer2Address);
+                const sig2BalanceBefore = await mockToken.balanceOf(
+                    signer2Address
+                );
 
                 const batchObject1 = {
                     assetType: AssetType.ERC20,
@@ -1140,11 +1193,14 @@ describe("Tipping Contract", function () {
                 const tippingContractBalanceAfter = await provider.getBalance(
                     contract.address
                 );
-                const tippingContractTokenBalanceAfter = await mockToken.balanceOf(
-                    contract.address
+                const tippingContractTokenBalanceAfter =
+                    await mockToken.balanceOf(contract.address);
+                const sig1BalanceAfter = await mockToken.balanceOf(
+                    signer1Address
                 );
-                const sig1BalanceAfter = await mockToken.balanceOf(signer1Address);
-                const sig2BalanceAfter = await mockToken.balanceOf(signer2Address);
+                const sig2BalanceAfter = await mockToken.balanceOf(
+                    signer2Address
+                );
 
                 expect(sig1BalanceAfter).to.equal(
                     sig1BalanceBefore + weiToReceive1
@@ -1162,7 +1218,12 @@ describe("Tipping Contract", function () {
         });
 
         it("allows sending unsupported ERC20 to non-pg and pg addresses as batch", async () => {
-            for (let contract of [tippingContract, tippingContract_noEAS, tippingContract_noOracle, tippingContract_noEAS_noOracle]) {
+            for (let contract of [
+                tippingContract,
+                tippingContract_noEAS,
+                tippingContract_noOracle,
+                tippingContract_noEAS_noOracle,
+            ]) {
                 await contract.addPublicGood(signer2Address);
 
                 const weiToReceive1 = BigInt("1000000");
@@ -1170,11 +1231,14 @@ describe("Tipping Contract", function () {
                 const tippingContractBalanceBefore = await provider.getBalance(
                     contract.address
                 );
-                const tippingContractTokenBalanceBefore = await mockToken.balanceOf(
-                    contract.address
+                const tippingContractTokenBalanceBefore =
+                    await mockToken.balanceOf(contract.address);
+                const sig1BalanceBefore = await mockToken.balanceOf(
+                    signer1Address
                 );
-                const sig1BalanceBefore = await mockToken.balanceOf(signer1Address);
-                const sig2BalanceBefore = await mockToken.balanceOf(signer2Address);
+                const sig2BalanceBefore = await mockToken.balanceOf(
+                    signer2Address
+                );
 
                 const batchObject1 = {
                     assetType: AssetType.ERC20,
@@ -1224,11 +1288,14 @@ describe("Tipping Contract", function () {
                 const tippingContractBalanceAfter = await provider.getBalance(
                     contract.address
                 );
-                const tippingContractTokenBalanceAfter = await mockToken.balanceOf(
-                    contract.address
+                const tippingContractTokenBalanceAfter =
+                    await mockToken.balanceOf(contract.address);
+                const sig1BalanceAfter = await mockToken.balanceOf(
+                    signer1Address
                 );
-                const sig1BalanceAfter = await mockToken.balanceOf(signer1Address);
-                const sig2BalanceAfter = await mockToken.balanceOf(signer2Address);
+                const sig2BalanceAfter = await mockToken.balanceOf(
+                    signer2Address
+                );
 
                 expect(sig1BalanceAfter).to.equal(
                     sig1BalanceBefore + weiToReceive1
@@ -1381,14 +1448,18 @@ describe("Tipping Contract", function () {
 
             expect(calculatedFeeNonPG).to.equal(dollarInWei);
             expect(calculatedFeeNonPG_noOracle).to.equal(dollarInWeiFallback);
-            expect(calculatedFeeNonPG_noEAS_noOracle).to.equal(dollarInWeiFallback);
+            expect(calculatedFeeNonPG_noEAS_noOracle).to.equal(
+                dollarInWeiFallback
+            );
             expect(calculatedFeePG).to.equal(0);
             expect(calculatedFeePG_noOracle).to.equal(0);
             expect(calculatedFeePG_noEAS_noOracle).to.equal(0);
 
             await tippingContract.deletePublicGood(signer2Address);
             await tippingContract_noOracle.deletePublicGood(signer2Address);
-            await tippingContract_noEAS_noOracle.deletePublicGood(signer2Address);
+            await tippingContract_noEAS_noOracle.deletePublicGood(
+                signer2Address
+            );
         });
 
         it("allows for sending asset to other address", async () => {
@@ -1684,14 +1755,18 @@ describe("Tipping Contract", function () {
 
             expect(calculatedFeeNonPG).to.equal(dollarInWei);
             expect(calculatedFeeNonPG_noOracle).to.equal(dollarInWeiFallback);
-            expect(calculatedFeeNonPG_noEAS_noOracle).to.equal(dollarInWeiFallback);
+            expect(calculatedFeeNonPG_noEAS_noOracle).to.equal(
+                dollarInWeiFallback
+            );
             expect(calculatedFeePG).to.equal(0);
             expect(calculatedFeePG_noOracle).to.equal(0);
             expect(calculatedFeePG_noEAS_noOracle).to.equal(0);
 
             await tippingContract.deletePublicGood(signer2Address);
             await tippingContract_noOracle.deletePublicGood(signer2Address);
-            await tippingContract_noEAS_noOracle.deletePublicGood(signer2Address);
+            await tippingContract_noEAS_noOracle.deletePublicGood(
+                signer2Address
+            );
         });
 
         it("allows for sending asset to other address", async () => {
@@ -2239,7 +2314,9 @@ describe("Tipping Contract", function () {
 
     describe("Miscellaneous", () => {
         it("No EAS + No Chainlink batch works", async () => {
-            await tippingContract_noEAS_noOracle.addSupportedERC20(mockToken2.address);
+            await tippingContract_noEAS_noOracle.addSupportedERC20(
+                mockToken2.address
+            );
 
             const nativeWeiToReceive = BigInt("1000000");
             const erc20WeiToReceive = BigInt("2000000");
@@ -2250,9 +2327,13 @@ describe("Tipping Contract", function () {
             const erc1155ID = BigInt("5");
 
             const tippingContractSupportedERC20BalanceBefore =
-                await mockToken2.balanceOf(tippingContract_noEAS_noOracle.address);
+                await mockToken2.balanceOf(
+                    tippingContract_noEAS_noOracle.address
+                );
             const tippingContractNativeBalanceBefore =
-                await provider.getBalance(tippingContract_noEAS_noOracle.address);
+                await provider.getBalance(
+                    tippingContract_noEAS_noOracle.address
+                );
             const tippingContractERC20BalanceBefore = await mockToken.balanceOf(
                 tippingContract_noEAS_noOracle.address
             );
@@ -2302,13 +2383,14 @@ describe("Tipping Contract", function () {
                 message: "",
             };
 
-            const batchSendObject = await tippingContract_noEAS_noOracle.calculateBatchFee([
-                batchObject1,
-                batchObject2,
-                batchObject3,
-                batchObject4,
-                batchObject5,
-            ]);
+            const batchSendObject =
+                await tippingContract_noEAS_noOracle.calculateBatchFee([
+                    batchObject1,
+                    batchObject2,
+                    batchObject3,
+                    batchObject4,
+                    batchObject5,
+                ]);
 
             let nativeAmountToSend = BigInt(0);
             let mockTokenAmountToSend = BigInt(0);
@@ -2338,12 +2420,21 @@ describe("Tipping Contract", function () {
                 mockToken2AmountToSend
             );
 
-            await mockNFT.approve(tippingContract_noEAS_noOracle.address, erc721ID);
-            await mockERC1155.setApprovalForAll(tippingContract_noEAS_noOracle.address, true);
+            await mockNFT.approve(
+                tippingContract_noEAS_noOracle.address,
+                erc721ID
+            );
+            await mockERC1155.setApprovalForAll(
+                tippingContract_noEAS_noOracle.address,
+                true
+            );
 
-            await tippingContract_noEAS_noOracle.batchSendTo(adjustedBatchSendObject, {
-                value: nativeAmountToSend,
-            });
+            await tippingContract_noEAS_noOracle.batchSendTo(
+                adjustedBatchSendObject,
+                {
+                    value: nativeAmountToSend,
+                }
+            );
 
             const tippingContractNativeBalanceAfter = await provider.getBalance(
                 tippingContract_noEAS_noOracle.address
@@ -2352,7 +2443,9 @@ describe("Tipping Contract", function () {
                 tippingContract_noEAS_noOracle.address
             );
             const tippingContractSupportedERC20BalanceAfter =
-                await mockToken2.balanceOf(tippingContract_noEAS_noOracle.address);
+                await mockToken2.balanceOf(
+                    tippingContract_noEAS_noOracle.address
+                );
             const sig1ERC1155BalanceAfter = await mockERC1155.balanceOf(
                 signer1Address,
                 erc1155ID
@@ -2373,7 +2466,80 @@ describe("Tipping Contract", function () {
                 sig1ERC1155BalanceBefore + erc1155ToReceive
             );
             expect(await mockNFT.ownerOf(erc721ID)).to.equal(signer1Address);
-            await tippingContract_noEAS_noOracle.deleteSupportedERC20(mockToken2.address);
+            await tippingContract_noEAS_noOracle.deleteSupportedERC20(
+                mockToken2.address
+            );
+        });
+
+        it("Fallback values kick in when sequencer is down", async () => {
+            const tokenToSend = BigInt("1000000");
+            const expectedProtocolFeeOracle = dollarInWei;
+            const expectedProtocolFeeFallback = dollarInWeiFallback;
+
+            const calculatedFee1 = await tippingContract.getPaymentFee(
+                tokenToSend,
+                AssetType.ERC20,
+                signer1Address
+            );
+
+            // price before
+            expect(calculatedFee1).to.equal(expectedProtocolFeeOracle);
+
+            await mockPriceSequencer.setPrice(1);
+            const calculatedFee2 = await tippingContract.getPaymentFee(
+                tokenToSend,
+                AssetType.ERC20,
+                signer1Address
+            );
+
+            // price after
+            expect(calculatedFee2).to.equal(expectedProtocolFeeFallback);
+            
+            await mockPriceSequencer.setPrice(0);
+            const calculatedFee3 = await tippingContract.getPaymentFee(
+                tokenToSend,
+                AssetType.ERC20,
+                signer1Address
+            );
+
+            // price before
+            expect(calculatedFee3).to.equal(expectedProtocolFeeOracle);
+        });
+
+        it("Fallback values kick in when sequencer's grace period is not over", async () => {
+            const tokenToSend = BigInt("1000000");
+            const expectedProtocolFeeOracle = dollarInWei;
+            const expectedProtocolFeeFallback = dollarInWeiFallback;
+
+            const calculatedFee1 = await tippingContract.getPaymentFee(
+                tokenToSend,
+                AssetType.ERC20,
+                signer1Address
+            );
+
+            // price before
+            expect(calculatedFee1).to.equal(expectedProtocolFeeOracle);
+
+            await mockPriceSequencer.setStalenessTimeDelta(3600);
+            const calculatedFee2 = await tippingContract.getPaymentFee(
+                tokenToSend,
+                AssetType.ERC20,
+                signer1Address
+            );
+
+            // price after
+            expect(calculatedFee2).to.equal(expectedProtocolFeeFallback);
+
+            await mockPriceSequencer.setStalenessTimeDelta(3601);
+            const calculatedFee3 = await tippingContract.getPaymentFee(
+                tokenToSend,
+                AssetType.ERC20,
+                signer1Address
+            );
+
+            // price before
+            expect(calculatedFee3).to.equal(expectedProtocolFeeOracle);
+
         });
     });
 
