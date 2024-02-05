@@ -18,6 +18,7 @@ error PaymentFeeTooSmall();
 error DenominatorTooSmall();
 error MinimalFeeTooBig();
 error MinimalFeePercentageTooBig();
+error InvalidAggregator();
 error UnsupportedAssetType();
 
 /**
@@ -28,8 +29,8 @@ error UnsupportedAssetType();
  * @notice In this version we use Chainlink oracles for the fee calculation
  */
 abstract contract FeeCalculator is Ownable {
-    AggregatorV3Interface internal immutable NATIVE_USD_PRICE_FEED;
-    AggregatorV3Interface internal immutable SEQUENCER_UPTIME_FEED;
+    AggregatorV3Interface internal NATIVE_USD_PRICE_FEED;
+    AggregatorV3Interface internal SEQUENCER_UPTIME_FEED;
     uint256 public NATIVE_WEI_MULTIPLIER = 10 ** 18;
     uint256 public constant PAYMENT_FEE_SLIPPAGE_PERCENT = 5;
     uint256 public PAYMENT_FEE_PERCENTAGE = 10;
@@ -44,7 +45,7 @@ abstract contract FeeCalculator is Ownable {
     int256 public FALLBACK_PRICE;
     uint256 public FALLBACK_DECIMALS;
     bool public SUPPORTS_CHAINLINK;
-    bool public checkSequencer;
+    bool public CHECK_SEQUENCER;
 
     constructor(
         address _nativeUsdAggregator,
@@ -53,12 +54,30 @@ abstract contract FeeCalculator is Ownable {
         int256 _fallbackFeePrice,
         uint256 _fallbackDecimals
     ) {
-        NATIVE_USD_PRICE_FEED = AggregatorV3Interface(_nativeUsdAggregator);
-        SEQUENCER_UPTIME_FEED = AggregatorV3Interface(_sequencerAddress);
-        checkSequencer = address(0) != _sequencerAddress;
-        NATIVE_USD_STALE_THRESHOLD = _stalenessThreshold;
+        if (_nativeUsdAggregator != address(0)) {
+            _initializeChainlink(
+                _nativeUsdAggregator,
+                _sequencerAddress,
+                _stalenessThreshold
+            );
+        }
         FALLBACK_PRICE = _fallbackFeePrice;
         FALLBACK_DECIMALS = _fallbackDecimals;
+    }
+
+    function _initializeChainlink(
+        address _nativeUsdAggregator,
+        address _sequencerAddress,
+        uint256 _stalenessThreshold
+    ) internal {
+        if (_nativeUsdAggregator == address(0)) {
+            revert InvalidAggregator();
+        }
+        SUPPORTS_CHAINLINK = true;
+        NATIVE_USD_PRICE_FEED = AggregatorV3Interface(_nativeUsdAggregator);
+        SEQUENCER_UPTIME_FEED = AggregatorV3Interface(_sequencerAddress);
+        CHECK_SEQUENCER = _sequencerAddress != address(0);
+        NATIVE_USD_STALE_THRESHOLD = _stalenessThreshold;
     }
 
     /*
@@ -81,9 +100,10 @@ abstract contract FeeCalculator is Ownable {
                 if (
                     _latestPrice > 0 &&
                     _lastUpdatedAt != 0 &&
-                    (block.timestamp - _lastUpdatedAt <= NATIVE_USD_STALE_THRESHOLD)
+                    (block.timestamp - _lastUpdatedAt <=
+                        NATIVE_USD_STALE_THRESHOLD)
                 ) {
-                    if (checkSequencer) {
+                    if (CHECK_SEQUENCER) {
                         try SEQUENCER_UPTIME_FEED.latestRoundData() returns (
                             uint80,
                             int256 answer,
@@ -219,7 +239,8 @@ abstract contract FeeCalculator is Ownable {
 
     function _calculateFixedFee() internal view returns (uint256 fee) {
         uint256 minimalPaymentFee = _getMinimumFee();
-        uint256 slippageThreshold = (minimalPaymentFee * (100 - PAYMENT_FEE_SLIPPAGE_PERCENT)) / 100;
+        uint256 slippageThreshold = (minimalPaymentFee *
+            (100 - PAYMENT_FEE_SLIPPAGE_PERCENT)) / 100;
 
         if (msg.value < slippageThreshold) {
             revert ValueSentTooSmall();
@@ -240,10 +261,9 @@ abstract contract FeeCalculator is Ownable {
         AssetType _assetType,
         address _recipient
     ) internal view returns (uint256 fee, uint256 value) {
-
         if (publicGoods[_recipient]) {
             return (0, _valueToSplit);
-        } 
+        }
         if (FEE_TYPE_MAPPING[_assetType] == FeeType.Percentage) {
             fee = _getPercentageFeePost(_valueToSplit);
             value = _valueToSplit - fee;

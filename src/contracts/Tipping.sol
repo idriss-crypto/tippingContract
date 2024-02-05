@@ -7,7 +7,7 @@ import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 
 import {ITipping} from "./interfaces/ITipping.sol";
 import {MultiAssetSender} from "./libs/MultiAssetSender.sol";
-import {FeeCalculator} from "./libs/FeeCalculator.sol";
+import {FeeCalculator, UnsupportedAssetType} from "./libs/FeeCalculator.sol";
 import {PublicGoodAttester} from "./libs/Attestation.sol";
 
 import {AssetType, FeeType} from "./enums/IDrissEnums.sol";
@@ -25,7 +25,6 @@ error FeeHigherThanProvidedNativeCurrency(
     uint256 fee,
     uint256 msg
 );
-error UnsupportedAssetType();
 error PayingWithNative();
 
 /**
@@ -42,7 +41,6 @@ contract Tipping is
     MultiAssetSender,
     FeeCalculator
 {
-    bool public SUPPORTS_EAS;
     mapping(address => bool) public admins;
 
     using SafeERC20 for IERC20;
@@ -72,9 +70,6 @@ contract Tipping is
         FEE_TYPE_MAPPING[AssetType.ERC721] = FeeType.Constant;
         FEE_TYPE_MAPPING[AssetType.ERC1155] = FeeType.Constant;
         FEE_TYPE_MAPPING[AssetType.SUPPORTED_ERC20] = FeeType.Percentage;
-        
-        SUPPORTS_CHAINLINK = _nativeUsdAggregator == address(0)? false : true;
-        SUPPORTS_EAS = _eas == address(0)? false : true;
     }
 
     event TipMessage(
@@ -454,7 +449,10 @@ contract Tipping is
     /**
      * @notice Add EAS support
      */
-    function enableEASSupport(address _eas, bytes32 _easSchema) public onlyAdmin {
+    function enableEASSupport(
+        address _eas,
+        bytes32 _easSchema
+    ) public onlyAdmin {
         _initializeEAS(_eas, _easSchema);
         SUPPORTS_EAS = true;
     }
@@ -464,6 +462,29 @@ contract Tipping is
      */
     function disableEASSupport() public onlyAdmin {
         SUPPORTS_EAS = false;
+    }
+
+    /**
+     * @notice Add Chainlink support
+     */
+    function enableChainlinkSupport(
+        address _nativeUsdAggregator,
+        address _sequencerAddress,
+        uint256 _stalenessThreshold
+    ) public onlyAdmin {
+        _initializeChainlink(
+            _nativeUsdAggregator,
+            _sequencerAddress,
+            _stalenessThreshold
+        );
+        SUPPORTS_CHAINLINK = true;
+    }
+
+    /**
+     * @notice Disable Chainlink support
+     */
+    function disableChainlinkSupport() public onlyAdmin {
+        SUPPORTS_CHAINLINK = false;
     }
 
     /**
@@ -487,10 +508,7 @@ contract Tipping is
         address _tokenContract
     ) external override nonReentrant {
         IERC20 withdrawTC = IERC20(_tokenContract);
-        withdrawTC.safeTransfer(
-            owner(),
-            withdrawTC.balanceOf(address(this))
-        );
+        withdrawTC.safeTransfer(owner(), withdrawTC.balanceOf(address(this)));
     }
 
     /*

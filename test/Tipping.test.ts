@@ -267,20 +267,22 @@ describe("Tipping Contract", function () {
             expect(await tippingContract_noEAS.SUPPORTS_EAS()).to.be.false;
         });
 
-        // it.only("properly adds and deletes Chainlink support", async () => {
-        //     expect(await tippingContract_noEAS.SUPPORTS_CHAINLINK()).to.be
-        //         .false;
+        it("properly adds and deletes Chainlink support", async () => {
+            expect(await tippingContract_noOracle.SUPPORTS_CHAINLINK()).to.be
+                .false;
 
-        //     await tippingContract_noEAS.enableChainlinkSupport(mockEAS.address, schema);
+            await tippingContract_noOracle.enableChainlinkSupport(mockPriceOracle.address, ZERO_ADDRESS, 0);
 
-        //     expect(await tippingContract_noEAS.SUPPORTS_CHAINLINK()).to.be
-        //         .true;
+            expect(await tippingContract_noOracle.SUPPORTS_CHAINLINK()).to.be
+                .true;
+            expect(await tippingContract_noOracle.CHECK_SEQUENCER()).to.be
+                .false;
 
-        //     await tippingContract_noEAS.disableChainlinkSupport();
+            await tippingContract_noOracle.disableChainlinkSupport();
 
-        //     expect(await tippingContract_noEAS.SUPPORTS_CHAINLINK()).to.be
-        //         .false;
-        // });
+            expect(await tippingContract_noOracle.SUPPORTS_CHAINLINK()).to.be
+                .false;
+        });
 
         it("allows anyone to call the withdraw function", async () => {
             expect(await tippingContract.admins(ownerAddress)).to.be.true;
