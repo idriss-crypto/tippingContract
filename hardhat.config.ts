@@ -1,5 +1,6 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
+import "solidity-coverage";
 
 const accounts = process.env.NETWORK_RPC_ENDPOINT_PRIVATE_KEY && {
   accounts: [process.env.NETWORK_RPC_ENDPOINT_PRIVATE_KEY],

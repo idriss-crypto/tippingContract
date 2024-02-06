@@ -334,6 +334,65 @@ describe("Tipping Contract", function () {
             expect(signer1TokenBalanceAfter).to.equal(signer1TokenBalanceAfter);
         });
 
+        it("allows to change minimal payment fee", async () => {
+            const calculatedFeeBefore = await tippingContract.getPaymentFee(
+                1000000,
+                AssetType.ERC20,
+                signer1Address
+            );
+            expect(calculatedFeeBefore).to.equal(dollarInWei);
+            // double minimal payment fee
+            await tippingContract.changeMinimalPaymentFee(2, 1);
+            const calculatedFeeAfter = await tippingContract.getPaymentFee(
+                1000000,
+                AssetType.ERC20,
+                signer1Address
+            );
+            expect(calculatedFeeAfter).to.equal(dollarInWei * BigInt("2"));
+            // return fee to initial amount
+            await tippingContract.changeMinimalPaymentFee(1, 1);
+            const calculatedFeeAfter2 = await tippingContract.getPaymentFee(
+                1000000,
+                AssetType.ERC20,
+                signer1Address
+            );
+            expect(calculatedFeeAfter2).to.equal(dollarInWei);
+        });
+
+        it("allows to change minimal payment fee percentage", async () => {
+            const weiToSend = BigInt("1000000");
+            const expectedCalculatedFeeBefore =
+                (weiToSend * PAYMENT_FEE_PERCENTAGE) /
+                PAYMENT_FEE_PERCENTAGE_DENOMINATOR;
+
+            const calculatedFeeBefore = await tippingContract.getPaymentFee(
+                weiToSend,
+                AssetType.Native,
+                signer1Address
+            );
+            expect(calculatedFeeBefore).to.equal(expectedCalculatedFeeBefore);
+
+            // increase minimal payment fee to close to 5%
+            await tippingContract.changePaymentFeePercentage(49, 1000);
+            const expectedCalculatedFeeAfter =
+                (weiToSend * BigInt("49")) / BigInt("1000");
+            const calculatedFeeAfter = await tippingContract.getPaymentFee(
+                weiToSend,
+                AssetType.Native,
+                signer1Address
+            );
+            expect(calculatedFeeAfter).to.equal(expectedCalculatedFeeAfter);
+
+            // return fee to initial amount
+            await tippingContract.changePaymentFeePercentage(10, 1000);
+            const calculatedFeeAfter2 = await tippingContract.getPaymentFee(
+                weiToSend,
+                AssetType.Native,
+                signer1Address
+            );
+            expect(calculatedFeeAfter2).to.equal(expectedCalculatedFeeBefore);
+        });
+
         it("allows only owner to change owner", async () => {
             await expect(
                 tippingContract
@@ -356,6 +415,12 @@ describe("Tipping Contract", function () {
             await expect(
                 tippingContract.connect(signer1).deleteAdmin(signer2Address)
             ).to.be.revertedWith("Ownable: caller is not the owner");
+        });
+
+        it("triggers onlyAdmin modifier when trying to call an admin function as non admin", async () => {
+            await expect(
+                tippingContract.connect(signer1).addPublicGood(signer2Address)
+            ).to.be.revertedWithCustomError(tippingContract, "OnlyAdminMethod");
         });
 
         it("fails when trying to renounce contract ownership", async () => {
@@ -2559,7 +2624,7 @@ describe("Tipping Contract", function () {
                 tippingContract.batchSendTo([batchObject1], {
                     value: dollarInWei,
                 })
-            ).to.be.revertedWithoutReason(); // Not detecting custom error
+            ).to.be.revertedWithoutReason(); // Not detecting custom error as out-of-scope assignment of assetType within contract scope throws unexpected error
         });
         it("reverts when minimal fee change is wrong", async () => {
             await expect(
