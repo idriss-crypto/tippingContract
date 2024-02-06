@@ -2494,7 +2494,7 @@ describe("Tipping Contract", function () {
 
             // price after
             expect(calculatedFee2).to.equal(expectedProtocolFeeFallback);
-            
+
             await mockPriceSequencer.setPrice(0);
             const calculatedFee3 = await tippingContract.getPaymentFee(
                 tokenToSend,
@@ -2539,7 +2539,6 @@ describe("Tipping Contract", function () {
 
             // price before
             expect(calculatedFee3).to.equal(expectedProtocolFeeOracle);
-
         });
     });
 
@@ -2561,6 +2560,89 @@ describe("Tipping Contract", function () {
                     value: dollarInWei,
                 })
             ).to.be.revertedWithoutReason(); // Not detecting custom error
+        });
+        it("reverts when minimal fee change is wrong", async () => {
+            await expect(
+                tippingContract.changeMinimalPaymentFee(0, 1, {})
+            ).to.be.revertedWithCustomError(
+                tippingContract,
+                "PaymentFeeTooSmall"
+            );
+
+            await expect(
+                tippingContract.changeMinimalPaymentFee(1, 0, {})
+            ).to.be.revertedWithCustomError(
+                tippingContract,
+                "DenominatorTooSmall"
+            );
+            await expect(
+                tippingContract.changeMinimalPaymentFee(25, 5, {})
+            ).to.be.revertedWithCustomError(
+                tippingContract,
+                "MinimalFeeTooBig"
+            );
+        });
+        it("reverts when percentage fee change is wrong", async () => {
+            await expect(
+                tippingContract.changePaymentFeePercentage(0, 100, {})
+            ).to.be.revertedWithCustomError(
+                tippingContract,
+                "PercentageFeeTooSmall"
+            );
+
+            await expect(
+                tippingContract.changePaymentFeePercentage(5, 0, {})
+            ).to.be.revertedWithCustomError(
+                tippingContract,
+                "DenominatorTooSmall"
+            );
+
+            await expect(
+                tippingContract.changePaymentFeePercentage(50, 1000, {})
+            ).to.be.revertedWithCustomError(
+                tippingContract,
+                "MinimalFeePercentageTooBig"
+            );
+        });
+        it("reverts when invalid aggregator address is provided", async () => {
+            await expect(
+                tippingContract.enableChainlinkSupport(
+                    ZERO_ADDRESS,
+                    ZERO_ADDRESS,
+                    0,
+                    {}
+                )
+            ).to.be.revertedWithCustomError(
+                tippingContract,
+                "InvalidAggregator"
+            );
+        });
+        it("reverts when invalid aggregator address is provided", async () => {
+            await expect(
+                tippingContract.enableEASSupport(ZERO_ADDRESS, schema, {})
+            ).to.be.revertedWithCustomError(tippingContract, "InvalidEAS");
+        });
+        it("reverts when sending native currency with supported ERC20", async () => {
+            const tokenToSend = BigInt("1000000");
+            await tippingContract.addSupportedERC20(mockToken2.address);
+
+            await mockToken2.increaseAllowance(
+                tippingContract.address,
+                tokenToSend
+            );
+            await expect(
+                tippingContract.sendERC20To(
+                    signer1Address,
+                    tokenToSend,
+                    mockToken2.address,
+                    "",
+                    {value: 100000}
+                )
+            ).to.be.revertedWithCustomError(
+                tippingContract,
+                "PayingWithNative"
+            );
+            await tippingContract.deleteSupportedERC20(mockToken2.address);
         });
     });
 });

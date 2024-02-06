@@ -485,6 +485,7 @@ contract Tipping is
      */
     function disableChainlinkSupport() public onlyAdmin {
         SUPPORTS_CHAINLINK = false;
+        CHECK_SEQUENCER = false;
     }
 
     /**
