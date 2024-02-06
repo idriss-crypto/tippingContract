@@ -11,12 +11,11 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import {AssetType, FeeType} from "../enums/IDrissEnums.sol";
 import {BatchCall, AdjustedBatchCall} from "../structs/IDrissStructs.sol";
 
-error AddressIsNull();
 error ValueSentTooSmall();
-error PercentageFeeTooSmall();
 error PaymentFeeTooSmall();
-error DenominatorTooSmall();
 error MinimalFeeTooBig();
+error PercentageFeeTooSmall();
+error DenominatorTooSmall();
 error MinimalFeePercentageTooBig();
 error InvalidAggregator();
 error UnsupportedAssetType();
@@ -283,10 +282,10 @@ abstract contract FeeCalculator is Ownable {
         uint256 _paymentFeePercentage,
         uint256 _paymentFeeDenominator
     ) external onlyOwner {
-        if (_paymentFeePercentage <= 0) {
+        if (_paymentFeePercentage == 0) {
             revert PercentageFeeTooSmall();
         }
-        if (_paymentFeeDenominator <= 0) {
+        if (_paymentFeeDenominator == 0) {
             revert DenominatorTooSmall();
         }
         // can't go higher than 5% fee
@@ -309,15 +308,14 @@ abstract contract FeeCalculator is Ownable {
         uint256 _minimalPaymentFee,
         uint256 _paymentFeeDenominator
     ) external onlyOwner {
-        if (_minimalPaymentFee <= 0) {
+        if (_minimalPaymentFee == 0) {
             revert PaymentFeeTooSmall();
         }
-        if (_paymentFeeDenominator <= 0) {
+        if (_paymentFeeDenominator == 0) {
             revert DenominatorTooSmall();
         }
         if (
-            _minimalPaymentFee / _paymentFeeDenominator >= 5 ||
-            _minimalPaymentFee >= 5
+            _minimalPaymentFee / _paymentFeeDenominator >= 5
         ) {
             revert MinimalFeeTooBig();
         }
