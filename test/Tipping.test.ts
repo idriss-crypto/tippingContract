@@ -2734,3 +2734,11 @@ describe("Tipping Contract", function () {
         });
     });
 });
+
+// ToDo: 
+// 1. develop and deploy mock reentrancy contract to test all reentrancy guards + failed withdraw function
+// 2. test onlyOwner modifier for changepayemntfee functions
+// 3. test remaining onlyAdmin modifiers
+// 4. test sending a transaction with threshold<msg.value<minimumfee
+// 5. set native_usd_staleness_threshold to low number to test fallback values for payment fee
+// 6. add onlyOwner test for renouncing ownership
