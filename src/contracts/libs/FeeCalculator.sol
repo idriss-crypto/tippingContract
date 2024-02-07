@@ -162,10 +162,6 @@ abstract contract FeeCalculator is Ownable {
         } else if (feeType == FeeType.Percentage) {
             return percentageFee;
         }
-
-        // default case - PercentageOrConstantMaximum
-        if (percentageFee > minimumPaymentFee) return percentageFee;
-        else return minimumPaymentFee;
     }
 
     function calculateBatchFee(

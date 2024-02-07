@@ -2536,6 +2536,29 @@ describe("Tipping Contract", function () {
             );
         });
 
+        it("Use oracle values when sequencer not supported", async () => {
+            const tokenToSend = BigInt("1000000");
+            const expectedProtocolFeeOracle = dollarInWei;
+
+            await tippingContract_noOracle.enableChainlinkSupport(
+                mockPriceOracle.address,
+                ZERO_ADDRESS,
+                0
+            );
+
+            const calculatedFee = await tippingContract_noOracle.getPaymentFee(
+                tokenToSend,
+                AssetType.ERC20,
+                signer1Address
+            );
+            expect(await tippingContract_noOracle.CHECK_SEQUENCER()).to.be
+            .false;
+            expect(calculatedFee).to.equal(expectedProtocolFeeOracle);
+
+            await tippingContract_noOracle.disableChainlinkSupport();
+
+        });
+
         it("Fallback values kick in when sequencer is down", async () => {
             const tokenToSend = BigInt("1000000");
             const expectedProtocolFeeOracle = dollarInWei;
