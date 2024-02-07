@@ -430,6 +430,9 @@ describe("Tipping Contract", function () {
                 tippingContract,
                 "RenounceOwnershipNotAllowed"
             );
+            await expect(
+                tippingContract.connect(signer1).renounceOwnership()
+            ).to.be.revertedWith("Ownable: caller is not the owner")
         });
     });
 
@@ -2543,7 +2546,7 @@ describe("Tipping Contract", function () {
             await tippingContract_noOracle.enableChainlinkSupport(
                 mockPriceOracle.address,
                 ZERO_ADDRESS,
-                0
+                3600
             );
 
             const calculatedFee = await tippingContract_noOracle.getPaymentFee(
@@ -2553,6 +2556,8 @@ describe("Tipping Contract", function () {
             );
             expect(await tippingContract_noOracle.CHECK_SEQUENCER()).to.be
             .false;
+            expect(await tippingContract_noOracle.SUPPORTS_CHAINLINK()).to.be
+            .true;
             expect(calculatedFee).to.equal(expectedProtocolFeeOracle);
 
             await tippingContract_noOracle.disableChainlinkSupport();
@@ -2619,6 +2624,41 @@ describe("Tipping Contract", function () {
             expect(calculatedFee2).to.equal(expectedProtocolFeeFallback);
 
             await mockPriceSequencer.setStalenessTimeDelta(3601);
+            const calculatedFee3 = await tippingContract.getPaymentFee(
+                tokenToSend,
+                AssetType.ERC20,
+                signer1Address
+            );
+
+            // price before
+            expect(calculatedFee3).to.equal(expectedProtocolFeeOracle);
+        });
+
+        it("Fallback values kick in when prices are stale", async () => {
+            const tokenToSend = BigInt("1000000");
+            const expectedProtocolFeeOracle = dollarInWei;
+            const expectedProtocolFeeFallback = dollarInWeiFallback;
+
+            const calculatedFee1 = await tippingContract.getPaymentFee(
+                tokenToSend,
+                AssetType.ERC20,
+                signer1Address
+            );
+
+            // price before
+            expect(calculatedFee1).to.equal(expectedProtocolFeeOracle);
+
+            await mockPriceOracle.setStalenessTimeDelta(3601);
+            const calculatedFee2 = await tippingContract.getPaymentFee(
+                tokenToSend,
+                AssetType.ERC20,
+                signer1Address
+            );
+
+            // price after
+            expect(calculatedFee2).to.equal(expectedProtocolFeeFallback);
+
+            await mockPriceOracle.setStalenessTimeDelta(1000);
             const calculatedFee3 = await tippingContract.getPaymentFee(
                 tokenToSend,
                 AssetType.ERC20,
@@ -2741,4 +2781,4 @@ describe("Tipping Contract", function () {
 // 3. test remaining onlyAdmin modifiers
 // 4. test sending a transaction with threshold<msg.value<minimumfee
 // 5. set native_usd_staleness_threshold to low number to test fallback values for payment fee
-// 6. add onlyOwner test for renouncing ownership
+// 6. add no sequencer test

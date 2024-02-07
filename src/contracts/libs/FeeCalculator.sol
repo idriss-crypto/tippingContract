@@ -19,6 +19,7 @@ error DenominatorTooSmall();
 error MinimalFeePercentageTooBig();
 error InvalidAggregator();
 error UnsupportedAssetType();
+error UnsupportedFeeType();
 
 /**
  * @title FeeCalculator
@@ -162,6 +163,7 @@ abstract contract FeeCalculator is Ownable {
         } else if (feeType == FeeType.Percentage) {
             return percentageFee;
         }
+        revert UnsupportedFeeType();
     }
 
     function calculateBatchFee(

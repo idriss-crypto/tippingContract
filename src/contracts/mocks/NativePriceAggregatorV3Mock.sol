@@ -9,6 +9,8 @@ pragma solidity 0.8.19;
  */
 contract NativePriceAggregatorV3Mock {
    int256 price = 230000000000;
+   uint256 public stalenessTimeDelta = 1000;
+
   function decimals() public pure returns (uint8) {
      return 8;
   }
@@ -59,7 +61,7 @@ contract NativePriceAggregatorV3Mock {
           safeBlockNumber,
           price,
           block.timestamp,
-          block.timestamp,
+          block.timestamp - stalenessTimeDelta,
           safeBlockNumber
        );
     }
@@ -67,6 +69,11 @@ contract NativePriceAggregatorV3Mock {
    function setPrice(int256 _price) external {
       price = _price;
    }
+
+   function setStalenessTimeDelta(uint256 _stalenessTimeDelta) external {
+        stalenessTimeDelta = _stalenessTimeDelta;
+    }
+
 
     function dollarToWei() external view returns (uint256) {
         (,int256 nativePrice,,,) = latestRoundData();
