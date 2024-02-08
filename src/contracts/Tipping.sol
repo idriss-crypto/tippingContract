@@ -395,54 +395,42 @@ contract Tipping is
     /**
      * @notice Add admin with privileged access
      */
-    function addAdmin(
-        address _adminAddress
-    ) external override onlyOwner nonReentrant {
+    function addAdmin(address _adminAddress) external override onlyOwner {
         admins[_adminAddress] = true;
     }
 
     /**
      * @notice Remove admin
      */
-    function deleteAdmin(
-        address _adminAddress
-    ) external override onlyOwner nonReentrant {
+    function deleteAdmin(address _adminAddress) external override onlyOwner {
         delete admins[_adminAddress];
     }
 
     /**
      * @notice Add public goods address with privileged fee structure
      */
-    function addPublicGood(
-        address publicGoodAddress
-    ) external onlyAdmin nonReentrant {
+    function addPublicGood(address publicGoodAddress) external onlyAdmin {
         publicGoods[publicGoodAddress] = true;
     }
 
     /**
      * @notice Remove public goods address
      */
-    function deletePublicGood(
-        address publicGoodAddress
-    ) external onlyAdmin nonReentrant {
+    function deletePublicGood(address publicGoodAddress) external onlyAdmin {
         delete publicGoods[publicGoodAddress];
     }
 
     /**
      * @notice Add supported erc20 address with percentage fee structure
      */
-    function addSupportedERC20(
-        address erc20Address
-    ) external onlyAdmin nonReentrant {
+    function addSupportedERC20(address erc20Address) external onlyAdmin {
         supportedERC20[erc20Address] = true;
     }
 
     /**
      * @notice ERC20 returns to minimum amount fee structure
      */
-    function deleteSupportedERC20(
-        address erc20Address
-    ) external onlyAdmin nonReentrant {
+    function deleteSupportedERC20(address erc20Address) external onlyAdmin {
         delete supportedERC20[erc20Address];
     }
 

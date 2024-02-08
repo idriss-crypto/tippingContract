@@ -12,6 +12,8 @@ import {
     ExtendedMockERC1155,
 } from "../src/contracts/extendContracts";
 
+import {MockAttacker} from "../src/types";
+
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const NFT_ID_ARRAY = [...Array(12).keys()];
 const ERC1155_ARRAY = [
@@ -46,6 +48,7 @@ describe("Tipping Contract", function () {
     let mockPriceOracle: ExtendedNativePriceAggregatorV3Mock;
     let mockPriceSequencer: ExtendedNativePriceAggregatorV3SequencerMock;
     let mockEAS: ExtendedMockEAS;
+    let mockAttacker: MockAttacker;
     let tippingContract: ExtendedTipping;
     let tippingContract_noEAS: ExtendedTipping;
     let tippingContract_noOracle: ExtendedTipping;
@@ -204,6 +207,12 @@ describe("Tipping Contract", function () {
         mockToken2.address = await mockToken2.getAddress();
         mockNFT.address = await mockNFT.getAddress();
         mockERC1155.address = await mockERC1155.getAddress();
+
+        const AttackerFactory = await ethers.getContractFactory("MockAttacker");
+        mockAttacker = (await AttackerFactory.deploy(
+            tippingContract.address
+        )) as MockAttacker;
+        await mockAttacker.waitForDeployment();
     });
 
     describe("Contract management", async () => {
@@ -417,9 +426,55 @@ describe("Tipping Contract", function () {
             ).to.be.revertedWith("Ownable: caller is not the owner");
         });
 
+        it("allows only owner to change minimal payment fee", async () => {
+            await expect(
+                tippingContract.connect(signer1).changeMinimalPaymentFee(2, 1)
+            ).to.be.revertedWith("Ownable: caller is not the owner");
+            await expect(
+                tippingContract
+                    .connect(signer1)
+                    .changePaymentFeePercentage(49, 1000)
+            ).to.be.revertedWith("Ownable: caller is not the owner");
+        });
+
         it("triggers onlyAdmin modifier when trying to call an admin function as non admin", async () => {
             await expect(
                 tippingContract.connect(signer1).addPublicGood(signer2Address)
+            ).to.be.revertedWithCustomError(tippingContract, "OnlyAdminMethod");
+            await expect(
+                tippingContract
+                    .connect(signer1)
+                    .deletePublicGood(signer2Address)
+            ).to.be.revertedWithCustomError(tippingContract, "OnlyAdminMethod");
+            await expect(
+                tippingContract
+                    .connect(signer1)
+                    .addSupportedERC20(mockToken.address)
+            ).to.be.revertedWithCustomError(tippingContract, "OnlyAdminMethod");
+            await expect(
+                tippingContract
+                    .connect(signer1)
+                    .deleteSupportedERC20(mockToken.address)
+            ).to.be.revertedWithCustomError(tippingContract, "OnlyAdminMethod");
+            await expect(
+                tippingContract
+                    .connect(signer1)
+                    .enableEASSupport(mockEAS.address, schema)
+            ).to.be.revertedWithCustomError(tippingContract, "OnlyAdminMethod");
+            await expect(
+                tippingContract.connect(signer1).disableEASSupport()
+            ).to.be.revertedWithCustomError(tippingContract, "OnlyAdminMethod");
+            await expect(
+                tippingContract
+                    .connect(signer1)
+                    .enableChainlinkSupport(
+                        mockPriceOracle.address,
+                        mockPriceSequencer.address,
+                        3600
+                    )
+            ).to.be.revertedWithCustomError(tippingContract, "OnlyAdminMethod");
+            await expect(
+                tippingContract.connect(signer1).disableChainlinkSupport()
             ).to.be.revertedWithCustomError(tippingContract, "OnlyAdminMethod");
         });
 
@@ -432,7 +487,7 @@ describe("Tipping Contract", function () {
             );
             await expect(
                 tippingContract.connect(signer1).renounceOwnership()
-            ).to.be.revertedWith("Ownable: caller is not the owner")
+            ).to.be.revertedWith("Ownable: caller is not the owner");
         });
     });
 
@@ -2539,6 +2594,53 @@ describe("Tipping Contract", function () {
             );
         });
 
+        it("Sending less than oracleFee but more than slippage threshold in native fee works", async () => {
+            const mockTokenAmountToSend = BigInt("1000000");
+
+            const tippingContractERC20BalanceBefore = await mockToken.balanceOf(
+                tippingContract.address
+            );
+            const signer1ERC20BalanceBefore = await mockToken.balanceOf(
+                signer1Address
+            );
+            const tippingContractNativeBalanceBefore =
+                await provider.getBalance(tippingContract.address);
+
+            await mockToken.increaseAllowance(
+                tippingContract.address,
+                mockTokenAmountToSend
+            );
+
+            await tippingContract.sendERC20To(
+                signer1Address,
+                mockTokenAmountToSend,
+                mockToken.address,
+                "",
+                {value: (dollarInWei * BigInt(97)) / BigInt(100)}
+            );
+
+            const tippingContractNativeBalanceAfter = await provider.getBalance(
+                tippingContract
+            );
+            const tippingContractERC20BalanceAfter = await mockToken.balanceOf(
+                tippingContract
+            );
+            const signer1ERC20BalanceAfter = await mockToken.balanceOf(
+                signer1Address
+            );
+
+            expect(tippingContractNativeBalanceAfter).to.equal(
+                tippingContractNativeBalanceBefore +
+                    (dollarInWei * BigInt(97)) / BigInt(100)
+            );
+            expect(tippingContractERC20BalanceAfter).to.equal(
+                tippingContractERC20BalanceBefore
+            );
+            expect(signer1ERC20BalanceAfter).to.equal(
+                signer1ERC20BalanceBefore + mockTokenAmountToSend
+            );
+        });
+
         it("Use oracle values when sequencer not supported", async () => {
             const tokenToSend = BigInt("1000000");
             const expectedProtocolFeeOracle = dollarInWei;
@@ -2555,13 +2657,12 @@ describe("Tipping Contract", function () {
                 signer1Address
             );
             expect(await tippingContract_noOracle.CHECK_SEQUENCER()).to.be
-            .false;
+                .false;
             expect(await tippingContract_noOracle.SUPPORTS_CHAINLINK()).to.be
-            .true;
+                .true;
             expect(calculatedFee).to.equal(expectedProtocolFeeOracle);
 
             await tippingContract_noOracle.disableChainlinkSupport();
-
         });
 
         it("Fallback values kick in when sequencer is down", async () => {
@@ -2687,7 +2788,7 @@ describe("Tipping Contract", function () {
                 tippingContract.batchSendTo([batchObject1], {
                     value: dollarInWei,
                 })
-            ).to.be.revertedWithoutReason(); // Not detecting custom error as out-of-scope assignment of assetType within contract scope throws unexpected error
+            ).to.be.revertedWithoutReason(); // Hardhat can't find reason, test for l.367 in Tipping.sol
         });
         it("reverts when minimal fee change is wrong", async () => {
             await expect(
@@ -2772,13 +2873,33 @@ describe("Tipping Contract", function () {
             );
             await tippingContract.deleteSupportedERC20(mockToken2.address);
         });
+        it("reverts when calculating payment fee for unsupported assetType", async () => {
+            await expect(
+                tippingContract.getPaymentFee(
+                    BigInt("1"),
+                    5, //unsupported assetType
+                    signer1Address
+                )
+            ).to.be.revertedWithoutReason(); // hardhat can't find reason, test for l166 in FeeCalculator.sol
+        });
+    });
+
+    describe("Reentrancy attack", () => {
+        it("Properly reverts reentrancy attack", async () => {
+            const mockAttackerAddress = await mockAttacker.getAddress();
+            await tippingContract.addPublicGood(
+                await mockAttacker.getAddress()
+            );
+            await tippingContract.transferOwnership(mockAttackerAddress);
+            await owner.sendTransaction({
+                to: mockAttackerAddress,
+                value: 100000,
+            });
+            for (let i = 0; i < 4; i++) {
+                await mockAttacker.setFunctionToAttack(i + 1);
+
+                await expect(mockAttacker.attack()).to.be.reverted;
+            }
+        });
     });
 });
-
-// ToDo: 
-// 1. develop and deploy mock reentrancy contract to test all reentrancy guards + failed withdraw function
-// 2. test onlyOwner modifier for changepayemntfee functions
-// 3. test remaining onlyAdmin modifiers
-// 4. test sending a transaction with threshold<msg.value<minimumfee
-// 5. set native_usd_staleness_threshold to low number to test fallback values for payment fee
-// 6. add no sequencer test
