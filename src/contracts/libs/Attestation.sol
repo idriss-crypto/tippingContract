@@ -6,7 +6,7 @@ import {IEAS, AttestationRequest, AttestationRequestData} from "../interfaces/IE
 import {NO_EXPIRATION_TIME, EMPTY_UID} from "./Common.sol";
 
 /**
- * @title Ethereum Attestation Service - Example
+ * @title PublicGoodAttester
  */
 contract PublicGoodAttester {
     error InvalidEAS();

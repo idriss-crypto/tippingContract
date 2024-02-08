@@ -31,6 +31,7 @@ error PayingWithNative();
  * @title Tipping
  * @author Rafał Kalinowski <deliriusz.eth@gmail.com>
  * @custom:contributor Lennard <@lennardevertz>
+ * @custom:security-contact hello@idriss.xyz
  * @notice This is an IDriss Send utility contract for all supported chains.
  */
 contract Tipping is
@@ -208,6 +209,9 @@ contract Tipping is
 
     /**
      * @notice Send a tip in ERC721 token, charging a small fee
+     * @notice Please note that this protocol does not support ERC721 with
+     * non-standard interfaces and functionality.
+     * Usage of such tokens may result in a loss of assets.
      * @param _recipient The address of the recipient of the tip
      * @param _tokenId The ID of the ERC721 token being sent as a tip
      * @param _nftContractAddress The address of the ERC721 token contract
@@ -243,6 +247,9 @@ contract Tipping is
 
     /**
      * @notice Send a tip in ERC1155 token, charging a small fee
+     * @notice Please note that this protocol does not support ERC1155 with
+     * non-standard interfaces and functionality.
+     * Usage of such tokens may result in a loss of assets.
      * @param _recipient The address of the recipient of the tip
      * @param _tokenId The ID of the ERC1155 token being sent as a tip
      * @param _amount The amount of the ERC1155 token being sent as a tip
@@ -285,10 +292,10 @@ contract Tipping is
     }
 
     /**
-     * @notice Please note that this protocol does not support tokens with
-     * non-standard ERC20 interfaces and functionality,
-     * such as tokens with rebasing functionality or fee-on-transfer token.
+     * @notice Please note that this protocol does not support ERC20/721/1155 with
+     * non-standard interfaces and functionality.
      * Usage of such tokens may result in a loss of assets.
+     * @param calls BatchCall array with each entry representing one transaction
      */
     function batchSendTo(
         BatchCall[] calldata calls
@@ -345,7 +352,7 @@ contract Tipping is
                     assetType == AssetType.ERC721 ||
                     assetType == AssetType.ERC1155
                 ) {
-                    /** Here, msg.value can much bigger than overall fee, so the fee calculation should not throw an error. */
+                    /** Here, msg.value >= overall fee. Check if enough msg.value is sent is done below. */
                     if (assetType == AssetType.ERC721) {
                         _sendERC721(
                             calls[i].tokenId,
@@ -367,7 +374,6 @@ contract Tipping is
                     revert UnsupportedAssetType();
                 }
             }
-
             emit TipMessage(
                 calls[i].recipient,
                 calls[i].message,

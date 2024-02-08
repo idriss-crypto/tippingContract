@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/IERC721.sol";
 import "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 
-error CoinSendFailed();
+error NativeSendFailed();
 error NothingToSend();
 
 /**
@@ -28,7 +28,7 @@ contract MultiAssetSender {
     function _sendCoin(address _to, uint256 _amount) internal {
         (bool sent, ) = payable(_to).call{value: _amount}("");
         if (!sent) {
-            revert CoinSendFailed();
+            revert NativeSendFailed();
         }
     }
 
