@@ -385,7 +385,7 @@ contract Tipping is
                 fee
             );
         }
-        if (msg.value < msgValueUsed + msgFeeUsed) {
+        if (msg.value < msgValueUsed + (msgFeeUsed*(100 - PAYMENT_FEE_SLIPPAGE_PERCENT) / 100)) {
             revert FeeHigherThanProvidedNativeCurrency(
                 msgValueUsed,
                 msgFeeUsed,

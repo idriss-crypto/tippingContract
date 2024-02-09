@@ -195,10 +195,10 @@ describe("Tipping Contract", function () {
         tippingContract_noEAS_noOracle.address =
             await tippingContract_noEAS_noOracle.getAddress();
 
-        dollarInWei = await mockPriceOracle.dollarToWei()/BigInt('10');
+        dollarInWei = (await mockPriceOracle.dollarToWei()) / BigInt("10");
         dollarInWeiFallback =
             (NATIVE_WEI_MULTIPLIER * BigInt("10") ** FALLBACK_DECIMALS) /
-            (FALLBACK_PRICE * BigInt('10'));
+            (FALLBACK_PRICE * BigInt("10"));
         PAYMENT_FEE_PERCENTAGE = BigInt("10");
         PAYMENT_FEE_PERCENTAGE_DENOMINATOR = BigInt("1000");
 
@@ -2398,9 +2398,65 @@ describe("Tipping Contract", function () {
             await tippingContract.deleteSupportedERC20(mockToken2.address);
         });
 
+        it("Sending less than oracleFee but more than slippage threshold in native fee works for batch", async () => {
+            const tokensToSend = BigInt("1000000");
+            const weiToSend = dollarInWei;
+
+            await mockToken.increaseAllowance(
+                tippingContract.address,
+                tokensToSend
+            );
+
+            const batchObject1 = {
+                assetType: AssetType.Native,
+                recipient: signer1Address,
+                amount: weiToSend,
+                tokenId: 0,
+                tokenAddress: ZERO_ADDRESS,
+                message: "",
+            };
+            const batchObject2 = {
+                assetType: AssetType.ERC20,
+                recipient: signer1Address,
+                amount: tokensToSend,
+                tokenId: 0,
+                tokenAddress: mockToken.address,
+                message: "",
+            };
+
+            const batchSendObject = await tippingContract.calculateBatchFee([
+                batchObject1,
+                batchObject2,
+            ]);
+
+            let nativeAmountToSend = BigInt(0);
+            let mockTokenAmountToSend = BigInt(0);
+            let adjustedBatchSendObject = batchSendObject.map((call) => {
+                nativeAmountToSend += BigInt(call.nativeAmount);
+                if (call.tokenAddress == mockToken.address)
+                    mockTokenAmountToSend += BigInt(call.amount);
+                return {
+                    assetType: call.assetType,
+                    recipient: call.recipient,
+                    amount: call.amount,
+                    tokenId: call.tokenId,
+                    tokenAddress: call.tokenAddress,
+                    message: call.message,
+                };
+            });
+
+            await expect(
+                tippingContract.batchSendTo(adjustedBatchSendObject, {
+                    value:
+                        (nativeAmountToSend * (BigInt("100") - BigInt("2"))) /
+                        BigInt("100"),
+                })
+            ).to.not.be.reverted;
+        });
+
         it("reverts when trying to send more than msg.value", async () => {
             const tokensToSend = BigInt("1000000");
-            const weiToSend = BigInt("1000000");
+            const weiToSend = dollarInWei;
 
             await mockToken.increaseAllowance(
                 tippingContract.address,
