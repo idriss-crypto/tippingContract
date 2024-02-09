@@ -36,8 +36,8 @@ abstract contract FeeCalculator is Ownable {
     uint256 public PAYMENT_FEE_PERCENTAGE = 10;
     uint256 public PAYMENT_FEE_PERCENTAGE_DENOMINATOR = 1000;
     uint256 public MINIMAL_PAYMENT_FEE = 1;
-    uint256 public MINIMAL_PAYMENT_FEE_DENOMINATOR = 1;
-    // you have to pass your desired fee types in a constructor deriving this contract
+    uint256 public MINIMAL_PAYMENT_FEE_DENOMINATOR = 10;
+    // setting desired fee types in a constructor deriving this contract
     mapping(AssetType => FeeType) public FEE_TYPE_MAPPING;
     mapping(address => bool) public supportedERC20;
     mapping(address => bool) public publicGoods;

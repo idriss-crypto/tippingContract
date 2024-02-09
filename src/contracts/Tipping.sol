@@ -446,7 +446,7 @@ contract Tipping is
     function enableEASSupport(
         address _eas,
         bytes32 _easSchema
-    ) public onlyAdmin {
+    ) public onlyOwner {
         _initializeEAS(_eas, _easSchema);
         SUPPORTS_EAS = true;
     }
@@ -454,7 +454,7 @@ contract Tipping is
     /**
      * @notice Disable EAS support
      */
-    function disableEASSupport() public onlyAdmin {
+    function disableEASSupport() public onlyOwner {
         SUPPORTS_EAS = false;
     }
 
@@ -465,7 +465,7 @@ contract Tipping is
         address _nativeUsdAggregator,
         address _sequencerAddress,
         uint256 _stalenessThreshold
-    ) public onlyAdmin {
+    ) public onlyOwner {
         _initializeChainlink(
             _nativeUsdAggregator,
             _sequencerAddress,
@@ -477,7 +477,7 @@ contract Tipping is
     /**
      * @notice Disable Chainlink support
      */
-    function disableChainlinkSupport() public onlyAdmin {
+    function disableChainlinkSupport() public onlyOwner {
         SUPPORTS_CHAINLINK = false;
         CHECK_SEQUENCER = false;
     }
@@ -514,3 +514,4 @@ contract Tipping is
         revert RenounceOwnershipNotAllowed();
     }
 }
+ 
