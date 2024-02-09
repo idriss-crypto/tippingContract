@@ -129,6 +129,8 @@ const config: HardhatUserConfig = {
       apiKey: {
         optimisticGoerli: process.env.OPSCAN_KEY!,
         optimisticEthereum: process.env.OPSCAN_KEY!,
+        ethereum: process.env.ETHERSCAN_KEY!,
+        sepolia: process.env.ETHERSCAN_KEY!,
         mantleTest: process.env.MANTLE_KEY!,
         mantle: process.env.MANTLE_KEY!,
         scrollSepolia: process.env.SCROLL_KEY!,

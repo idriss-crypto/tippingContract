@@ -33,23 +33,6 @@ contract MultiAssetSender {
     }
 
     /**
-     * @notice Wrapper for sending single ERC1155 asset
-     * @dev due to how approval in ERC1155 standard is handled, the smart contract has to ask for permissions to manage
-     *      ALL tokens "for simplicity"... Hence, it has to be done before calling function that transfers the token
-     *      to smart contract, and revoked afterwards
-     */
-    function _sendERC1155AssetBatch(
-        uint256[] memory _assetIds,
-        uint256[] memory _amounts,
-        address _from,
-        address _to,
-        address _contractAddress
-    ) internal {
-        IERC1155 nft = IERC1155(_contractAddress);
-        nft.safeBatchTransferFrom(_from, _to, _assetIds, _amounts, "");
-    }
-
-    /**
      * @notice Wrapper for sending multiple ERC1155 assets
      * @dev due to how approval in ERC1155 standard is handled, the smart contract has to ask for permissions to manage
      *      ALL tokens "for simplicity"... Hence, it has to be done before calling function that transfers the token
@@ -77,25 +60,6 @@ contract MultiAssetSender {
     ) internal {
         IERC721 nft = IERC721(_contractAddress);
         nft.transferFrom(_from, _to, _assetId);
-    }
-
-    /**
-     * @notice Wrapper for sending NFT asset with additional checks and iteraton over an array
-     */
-    function _sendNFTAssetBatch(
-        uint256[] memory _assetIds,
-        address _from,
-        address _to,
-        address _contractAddress
-    ) internal {
-        if (_assetIds.length == 0) {
-            revert NothingToSend();
-        }
-
-        IERC721 nft = IERC721(_contractAddress);
-        for (uint256 i = 0; i < _assetIds.length; ++i) {
-            nft.transferFrom(_from, _to, _assetIds[i]);
-        }
     }
 
     /**
