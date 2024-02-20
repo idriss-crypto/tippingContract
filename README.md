@@ -1,13 +1,31 @@
-# Sample Hardhat Project
+# Contracts
+(Social) Tipping contracts used by IDriss. 
 
-This project demonstrates a basic Hardhat use case. It comes with a sample contract, a test for that contract, and a script that deploys that contract.
+## Version info
+This is v2 of our tipping contract. 
+For v1 and other contracts used by IDriss, refer to our [contracts repo](https://github.com/idriss-crypto/contracts). 
 
-Try running some of the following tasks:
+## Setting Up
 
-```shell
-npx hardhat help
-npx hardhat test
-REPORT_GAS=true npx hardhat test
-npx hardhat node
-npx hardhat run scripts/deploy.ts
+Clone this repo with
+```commandline
+git clone https://github.com/idriss-crypto/contracts.git
 ```
+and then install the dependencies with
+```
+npm install
+npx hardhat compile
+```
+
+## Running tests
+```
+npx hardhat test
+```
+or with coverage report
+```
+npx hardhat coverage
+```
+
+## License
+
+This project is licensed under [GPLv3](https://github.com/idriss-crypto/contracts/blob/main/LICENSE).
