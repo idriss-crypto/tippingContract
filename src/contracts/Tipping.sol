@@ -383,7 +383,11 @@ contract Tipping is
                 fee
             );
         }
-        if (msg.value < msgValueUsed + (msgFeeUsed*(100 - PAYMENT_FEE_SLIPPAGE_PERCENT) / 100)) {
+        if (
+            msg.value <
+            msgValueUsed +
+                ((msgFeeUsed * (100 - PAYMENT_FEE_SLIPPAGE_PERCENT)) / 100)
+        ) {
             revert FeeHigherThanProvidedNativeCurrency(
                 msgValueUsed,
                 msgFeeUsed,
@@ -444,7 +448,7 @@ contract Tipping is
     function enableEASSupport(
         address _eas,
         bytes32 _easSchema
-    ) public onlyOwner {
+    ) external onlyOwner {
         _initializeEAS(_eas, _easSchema);
         SUPPORTS_EAS = true;
     }
@@ -452,7 +456,7 @@ contract Tipping is
     /**
      * @notice Disable EAS support
      */
-    function disableEASSupport() public onlyOwner {
+    function disableEASSupport() external onlyOwner {
         SUPPORTS_EAS = false;
     }
 
@@ -463,7 +467,7 @@ contract Tipping is
         address _nativeUsdAggregator,
         address _sequencerAddress,
         uint256 _stalenessThreshold
-    ) public onlyOwner {
+    ) external onlyOwner {
         _initializeChainlink(
             _nativeUsdAggregator,
             _sequencerAddress,
@@ -475,7 +479,7 @@ contract Tipping is
     /**
      * @notice Disable Chainlink support
      */
-    function disableChainlinkSupport() public onlyOwner {
+    function disableChainlinkSupport() external onlyOwner {
         SUPPORTS_CHAINLINK = false;
         CHECK_SEQUENCER = false;
     }
@@ -512,4 +516,3 @@ contract Tipping is
         revert RenounceOwnershipNotAllowed();
     }
 }
- 

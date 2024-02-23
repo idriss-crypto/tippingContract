@@ -49,4 +49,16 @@ interface ITipping {
     function addSupportedERC20(address erc20Address) external;
 
     function deleteSupportedERC20(address erc20Address) external;
+
+    function enableEASSupport(address _eas, bytes32 _easSchema) external;
+
+    function disableEASSupport() external;
+
+    function enableChainlinkSupport(
+        address _nativeUsdAggregator,
+        address _sequencerAddress,
+        uint256 _stalenessThreshold
+    ) external;
+
+    function disableChainlinkSupport() external;
 }
